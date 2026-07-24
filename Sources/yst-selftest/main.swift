@@ -556,6 +556,32 @@ check(SpaceInfo.decodeList("""
 """.data(using: .utf8)!) == [SpaceInfo(index: 1, display: 2, isVisible: true)],
       "SpaceInfo.decodeList")
 
+print("SpaceMover.liftDetected")
+let liftBase = YRect(x: 100, y: 50, w: 800, h: 600)
+check(!SpaceMover.liftDetected(before: liftBase, after: liftBase), "no drift -> not lifted")
+check(!SpaceMover.liftDetected(before: liftBase, after: YRect(x: 101, y: 51, w: 800, h: 600)),
+      "sub-threshold drift -> not lifted")
+check(SpaceMover.liftDetected(before: liftBase, after: YRect(x: 110, y: 55, w: 800, h: 600)),
+      "jiggle drift -> lifted")
+print("GrabPointPlanner")
+let gpFrame = YRect(x: 100, y: 50, w: 1200, h: 800)
+let gpPoints = GrabPointPlanner.candidates(frame: gpFrame)
+check(gpPoints.count >= 3 && gpPoints.allSatisfy { $0.y == 58 && $0.x >= 240 && $0.x <= 1210 },
+      "candidates stay in top strip away from corners")
+check(gpPoints.first!.x != gpFrame.x + gpFrame.w / 2 && gpPoints.last!.x == gpFrame.x + gpFrame.w / 2,
+      "off-center first, center last")
+check(GrabPointPlanner.candidates(frame: YRect(x: 0, y: 0, w: 180, h: 400)) == [CGPoint(x: 90, y: 8)],
+      "narrow window falls back to center")
+let gpCenter = gpFrame.x + gpFrame.w / 2
+check(!GrabPointPlanner.choose(frame: gpFrame,
+                               roleAt: { abs($0.x - gpCenter) < 1 ? "AXTextField" : nil })
+        .contains { abs($0.x - gpCenter) < 1 },
+      "search field at center is skipped")
+check(GrabPointPlanner.choose(frame: gpFrame, roleAt: { _ in "AXButton" }) == gpPoints,
+      "all-unsafe probe falls back to the unfiltered list")
+check(GrabPointPlanner.isSafe(role: nil) && !GrabPointPlanner.isSafe(role: "AXSearchField"),
+      "role classification")
+
 print("L10n")
 check(L10n.resolve(.auto, preferred: ["zh-Hant-TW"]) == .zhHant, "auto resolves zh-Hant")
 check(L10n.resolve(.auto, preferred: ["ja-JP"]) == .ja, "auto resolves ja")

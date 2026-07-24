@@ -6,11 +6,21 @@ import Foundation
 public final class SpaceMover {
     private let client: YabaiClient
     private let simulator: SpaceSimulating
+    private let probe: GrabPointProbing
     private let queue = DispatchQueue(label: "yabai-dockstack.space-mover")
 
-    public init(client: YabaiClient, simulator: SpaceSimulating = SpaceSimulator()) {
+    public init(client: YabaiClient, simulator: SpaceSimulating = SpaceSimulator(),
+                probe: GrabPointProbing = AXGrabPointProbe()) {
         self.client = client
         self.simulator = simulator
+        self.probe = probe
+    }
+
+    /// A grab counts as lifted when the jiggle visibly moved the window: the
+    /// jiggle travels (10, 5), so ≥4 pt of drift separates a real lift from
+    /// query noise while tolerating partial frames.
+    public static func liftDetected(before: YRect, after: YRect) -> Bool {
+        abs(after.x - before.x) + abs(after.y - before.y) >= 4
     }
 
     /// Wire form: "move-space prev" | "move-space next" | "move-space 4".
@@ -64,14 +74,26 @@ public final class SpaceMover {
                     NSLog("yabai-dockstack: move-space aborted, focused window changed before arrow walk")
                     return
                 }
-                // Top-center: clear of the traffic lights and (in most apps)
-                // of toolbar controls; the top strip is the drag region.
-                let grabX = fresh.frame.x + fresh.frame.w / 2
-                let grabY = fresh.frame.y + 8
-                let observed = simulator.dragWalk(grabX: grabX, grabY: grabY,
-                                                   direction: direction, count: count)
-                if !observed {
-                    NSLog("yabai-dockstack: move-space walk not fully observed (grab may have missed the titlebar)")
+                // Pick drag points along the top strip, AX-probing each spot to
+                // skip controls that would activate (search fields, buttons)
+                // instead of lifting the window.
+                let baseline = fresh.frame
+                let grabPoints = GrabPointPlanner.choose(frame: baseline,
+                                                         roleAt: { [probe] in probe.role(at: $0) })
+                let outcome = simulator.dragWalk(
+                    grabPoints: grabPoints, direction: direction, count: count,
+                    liftCheck: { [client] in
+                        guard let now = client.queryFocusedWindow(), now.id == fresh.id else { return false }
+                        return SpaceMover.liftDetected(before: baseline, after: now.frame)
+                    })
+                switch outcome {
+                case .neverLifted:
+                    NSLog("yabai-dockstack: move-space aborted, no grab attempt lifted the window")
+                    return
+                case .walked(let observedAll):
+                    if !observedAll {
+                        NSLog("yabai-dockstack: move-space walk not fully observed")
+                    }
                 }
             }
         }

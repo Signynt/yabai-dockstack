@@ -1,12 +1,26 @@
 import AppKit
 import CoreGraphics
 
+/// Outcome of a simulated drag walk.
+public enum DragWalkOutcome: Equatable {
+    /// The window was lifted and the walk ran; `observedAll` is false when some
+    /// space transition wasn't observed within the timeout.
+    case walked(observedAll: Bool)
+    /// No grab attempt lifted the window; the walk was not performed, so the
+    /// active space never flicked away and back.
+    case neverLifted
+}
+
 /// Simulates the native "drag a window's titlebar and press ctrl+arrow" gesture
 /// so windows can travel between spaces with SIP fully enabled. Requires the
 /// Accessibility permission the app already holds.
 public protocol SpaceSimulating {
-    /// Returns true if every space transition was observed (or waited out).
-    func dragWalk(grabX: Double, grabY: Double, direction: ArrowDirection, count: Int) -> Bool
+    /// Tries each grab point in order until one lifts the window. `liftCheck`
+    /// reports whether the pressed window is actually following the drag (e.g.
+    /// its frame drifted with the jiggle); pass nil to skip verification and
+    /// walk blindly after the first point.
+    func dragWalk(grabPoints: [CGPoint], direction: ArrowDirection, count: Int,
+                  liftCheck: (() -> Bool)?) -> DragWalkOutcome
 }
 
 public final class SpaceSimulator: SpaceSimulating {
@@ -17,36 +31,50 @@ public final class SpaceSimulator: SpaceSimulating {
 
     public init() {}
 
-    public func dragWalk(grabX: Double, grabY: Double, direction: ArrowDirection, count: Int) -> Bool {
-        let point = CGPoint(x: grabX, y: grabY)
+    public func dragWalk(grabPoints: [CGPoint], direction: ArrowDirection, count: Int,
+                         liftCheck: (() -> Bool)?) -> DragWalkOutcome {
         let keyCode: CGKeyCode = direction == .left ? 123 : 124
-        let source = CGEventSource(stateID: .hidSystemState)
+        let source = makeSource()
 
         func post(_ e: CGEvent?) { e?.post(tap: .cghidEventTap); usleep(25_000) }
 
-        // Park the cursor on the grab point before pressing — WindowServer
-        // tracks the cursor, and a press far from it doesn't start a drag.
-        post(CGEvent(mouseEventSource: source, mouseType: .mouseMoved,
-                     mouseCursorPosition: point, mouseButton: .left))
-        usleep(120_000)
-        guard let down = CGEvent(mouseEventSource: source, mouseType: .leftMouseDown,
-                                 mouseCursorPosition: point, mouseButton: .left) else { return false }
-        down.post(tap: .cghidEventTap)
+        var held: CGPoint?
+        for point in grabPoints {
+            // Park the cursor on the grab point before pressing — WindowServer
+            // tracks the cursor, and a press far from it doesn't start a drag.
+            post(CGEvent(mouseEventSource: source, mouseType: .mouseMoved,
+                         mouseCursorPosition: point, mouseButton: .left))
+            usleep(120_000)
+            guard let down = CGEvent(mouseEventSource: source, mouseType: .leftMouseDown,
+                                     mouseCursorPosition: point, mouseButton: .left) else { continue }
+            down.post(tap: .cghidEventTap)
+            // Real dragged events past the drag threshold actually lift the window;
+            // a tiny jiggle reads as a click and the window stays behind.
+            var last = point
+            for i in 1...5 {
+                last = CGPoint(x: point.x + Double(i) * 2, y: point.y + Double(i))
+                post(CGEvent(mouseEventSource: source, mouseType: .leftMouseDragged,
+                             mouseCursorPosition: last, mouseButton: .left))
+            }
+            usleep(150_000)
+            if liftCheck?() ?? true {
+                held = last
+                break
+            }
+            // Grab missed. Release back at the origin so the net drag is zero
+            // (a drop elsewhere could trigger yabai's drop action), then retry.
+            post(CGEvent(mouseEventSource: source, mouseType: .leftMouseDragged,
+                         mouseCursorPosition: point, mouseButton: .left))
+            CGEvent(mouseEventSource: source, mouseType: .leftMouseUp,
+                    mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+            usleep(120_000)
+        }
+        guard let dragPoint = held else { return .neverLifted }
+
         defer {
             CGEvent(mouseEventSource: source, mouseType: .leftMouseUp,
-                    mouseCursorPosition: CGPoint(x: point.x + 10, y: point.y + 5),
-                    mouseButton: .left)?.post(tap: .cghidEventTap)
+                    mouseCursorPosition: dragPoint, mouseButton: .left)?.post(tap: .cghidEventTap)
         }
-        // Real dragged events past the drag threshold actually lift the window;
-        // a tiny jiggle reads as a click and the window stays behind.
-        for i in 1...5 {
-            post(CGEvent(mouseEventSource: source, mouseType: .leftMouseDragged,
-                         mouseCursorPosition: CGPoint(x: point.x + Double(i) * 2,
-                                                      y: point.y + Double(i)),
-                         mouseButton: .left))
-        }
-        usleep(150_000)
-
         var allObserved = true
         for _ in 0..<count {
             let waiter = SpaceChangeWaiter()
@@ -54,7 +82,20 @@ public final class SpaceSimulator: SpaceSimulating {
             if !waiter.wait(timeout: stepTimeout) { allObserved = false }
             Thread.sleep(forTimeInterval: settle)
         }
-        return allObserved
+        return .walked(observedAll: allObserved)
+    }
+
+    /// HID-state source that also suppresses hardware *mouse* events for a short
+    /// window after each synthetic post — a stray trackpad touch mid-sequence
+    /// otherwise breaks the drag before the window is lifted. Keyboard events
+    /// stay permitted so real modifier releases keep reaching the system.
+    private func makeSource() -> CGEventSource? {
+        let source = CGEventSource(stateID: .hidSystemState)
+        source?.localEventsSuppressionInterval = 0.35
+        source?.setLocalEventsFilterDuringSuppressionState(
+            [.permitLocalKeyboardEvents, .permitSystemDefinedEvents],
+            state: .eventSuppressionStateSuppressionInterval)
+        return source
     }
 
     /// Posts ctrl+arrow the way the hardware does: a flagsChanged for the
@@ -62,7 +103,7 @@ public final class SpaceSimulator: SpaceSimulating {
     /// arrow keys always have (the symbolic hotkey won't match without them),
     /// then the control release.
     private func postCtrlKey(_ keyCode: CGKeyCode) {
-        let source = CGEventSource(stateID: .hidSystemState)
+        let source = makeSource()
         if let e = CGEvent(keyboardEventSource: source, virtualKey: 59, keyDown: true) {
             e.type = .flagsChanged
             e.flags = .maskControl
