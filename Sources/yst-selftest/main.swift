@@ -96,6 +96,10 @@ check(AppConfig.load(from: nil) == AppConfig.defaults, "nil -> defaults")
 let partial = AppConfig.load(from: #"{"style":"flag","cellSize":24}"#.data(using: .utf8))
 check(partial.style == .flag && partial.cellSize == 24 && partial.offset == AppConfig.defaults.offset, "partial merge over defaults")
 check(AppConfig.load(from: "not json".data(using: .utf8)) == AppConfig.defaults, "garbage -> defaults")
+check(!AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).indicatorClickThrough,
+      "indicatorClickThrough defaults off for existing configs")
+check(AppConfig.load(from: #"{"indicatorClickThrough":true}"#.data(using: .utf8)).indicatorClickThrough,
+      "indicatorClickThrough loads from config")
 let tmp = NSTemporaryDirectory() + "yst-selftest-config.json"
 var saved = AppConfig.defaults; saved.style = .flag; saved.save(to: tmp)
 check(AppConfig.loadFromFile(tmp).style == .flag, "save/reload round-trips")

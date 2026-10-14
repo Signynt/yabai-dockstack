@@ -22,6 +22,11 @@ final class AppConfigTests: XCTestCase {
         XCTAssertTrue(AppConfig.load(from: nil).dockPreview)
     }
 
+    func testIndicatorClickThroughDefaultsOffAndLoads() {
+        XCTAssertFalse(AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).indicatorClickThrough)
+        XCTAssertTrue(AppConfig.load(from: #"{"indicatorClickThrough":true}"#.data(using: .utf8)).indicatorClickThrough)
+    }
+
     func testGarbageFallsBackToDefaults() {
         let c = AppConfig.load(from: "not json".data(using: .utf8))
         XCTAssertEqual(c, AppConfig.defaults)

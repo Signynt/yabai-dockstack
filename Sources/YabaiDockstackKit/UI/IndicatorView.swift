@@ -5,7 +5,13 @@ public final class IndicatorView: NSView {
         didSet { needsDisplay = true; updateTrackingAreas() }
     }
     public var config: AppConfig {
-        didSet { needsDisplay = true }
+        didSet {
+            needsDisplay = true
+            if config.indicatorClickThrough != oldValue.indicatorClickThrough {
+                hideTooltip()
+                updateTrackingAreas()
+            }
+        }
     }
     public var onClickWindow: ((Int) -> Void)?
 
@@ -93,6 +99,7 @@ public final class IndicatorView: NSView {
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
+        guard !config.indicatorClickThrough else { return }  // no hover tooltips
         let cell = bounds.width
         for (i, _) in stack.windows.enumerated() {
             let y = bounds.height - CGFloat(i + 1) * cell

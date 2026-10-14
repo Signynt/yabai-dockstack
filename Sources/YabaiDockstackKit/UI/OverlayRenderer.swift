@@ -11,6 +11,7 @@ public final class OverlayRenderer {
         self.config = config
         for panel in panels.values {
             panel.indicatorView.config = config
+            panel.ignoresMouseEvents = config.indicatorClickThrough
         }
     }
 
