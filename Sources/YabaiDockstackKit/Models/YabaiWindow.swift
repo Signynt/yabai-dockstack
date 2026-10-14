@@ -12,15 +12,18 @@ public struct YabaiWindow: Equatable {
     public let hasFocus: Bool
     public let isVisible: Bool
     public let isFloating: Bool
+    /// Sticky windows show on every space but yabai reports a single `space`.
+    public let isSticky: Bool
 
     public init(id: Int, pid: Int, app: String, title: String, frame: YRect,
                 display: Int, space: Int, stackIndex: Int, hasFocus: Bool,
-                isVisible: Bool = true, isFloating: Bool = false) {
+                isVisible: Bool = true, isFloating: Bool = false, isSticky: Bool = false) {
         self.id = id; self.pid = pid; self.app = app; self.title = title
         self.frame = frame; self.display = display; self.space = space
         self.stackIndex = stackIndex; self.hasFocus = hasFocus
         self.isVisible = isVisible
         self.isFloating = isFloating
+        self.isSticky = isSticky
     }
 
     private struct Raw: Decodable {
@@ -36,12 +39,14 @@ public struct YabaiWindow: Equatable {
         let hasFocus: Bool
         let isVisible: Bool?
         let isFloating: Bool?
+        let isSticky: Bool?
         enum CodingKeys: String, CodingKey {
             case id, pid, app, title, frame, display, space
             case stackIndex = "stack-index"
             case hasFocus = "has-focus"
             case isVisible = "is-visible"
             case isFloating = "is-floating"
+            case isSticky = "is-sticky"
         }
     }
 
@@ -58,7 +63,8 @@ public struct YabaiWindow: Equatable {
                 frame: YRect(x: raw.frame.x, y: raw.frame.y, w: raw.frame.w, h: raw.frame.h),
                 display: raw.display, space: raw.space,
                 stackIndex: raw.stackIndex, hasFocus: raw.hasFocus,
-                isVisible: raw.isVisible ?? true, isFloating: raw.isFloating ?? false))
+                isVisible: raw.isVisible ?? true, isFloating: raw.isFloating ?? false,
+                isSticky: raw.isSticky ?? false))
         }
         return out
     }

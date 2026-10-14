@@ -25,4 +25,15 @@ final class VisibleSpaceFilterTests: XCTestCase {
         let wins = [win(1, space: 5, visible: false)]
         XCTAssertEqual(VisibleSpaceFilter.apply(wins).count, 1)  // safety fallback
     }
+
+    func testStickyWindowDoesNotMarkItsHiddenSpaceVisible() {
+        // A sticky window shows on every space but yabai reports it on space 2
+        // (hidden) with is-visible == true; space 1 is the one actually shown.
+        let sticky = YabaiWindow(id: 9, pid: 9, app: "S", title: "t",
+                                 frame: YRect(x: 0, y: 0, w: 1, h: 1),
+                                 display: 1, space: 2, stackIndex: 0, hasFocus: false,
+                                 isVisible: true, isFloating: true, isSticky: true)
+        let wins = [win(1, space: 1, visible: true), win(2, space: 2, visible: false), sticky]
+        XCTAssertEqual(Set(VisibleSpaceFilter.apply(wins).map { $0.id }), [1])
+    }
 }

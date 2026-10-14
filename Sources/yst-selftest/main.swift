@@ -31,6 +31,9 @@ check(wins.first { $0.id == 1 }?.title == "projA — Visual Studio Code", "title
 check(wins.first { $0.id == 1 }?.hasFocus == true, "has-focus decoded")
 check(wins.first { $0.id == 2 }?.isFloating == true, "is-floating decoded")
 check(wins.first { $0.id == 1 }?.isFloating == false, "is-floating defaults to false when key missing")
+check(YabaiWindow.decodeList(#"[{"id":5,"pid":1,"app":"G","frame":{"x":0,"y":0,"w":1,"h":1},"display":1,"space":2,"stack-index":0,"has-focus":false,"is-sticky":true}]"#.data(using: .utf8)!).first?.isSticky == true,
+      "is-sticky decoded")
+check(wins.first { $0.id == 1 }?.isSticky == false, "is-sticky defaults to false when key missing")
 
 print("StackBuilder")
 let f = YRect(x: 0, y: 25, w: 800, h: 900)
@@ -40,6 +43,12 @@ check(stacks.count == 1, "one stack built")
 check(stacks.first?.windows.map { $0.id } == [1, 2], "sorted by stack index")
 check(stacks.first?.isFocused == true, "stack focused")
 check(StackBuilder.build([win(1, "A", 0, f), win(2, "B", 0, f)]).isEmpty, "stack-index 0 is not a stack")
+func spaceWin(_ id: Int, _ space: Int, _ idx: Int) -> YabaiWindow {
+    YabaiWindow(id: id, pid: id, app: "A", title: "A", frame: f, display: 1, space: space, stackIndex: idx, hasFocus: false)
+}
+check(StackBuilder.build([spaceWin(1, 1, 1), spaceWin(2, 1, 2)]).first?.key
+      != StackBuilder.build([spaceWin(3, 2, 1), spaceWin(4, 2, 2)]).first?.key,
+      "same-frame stacks on different spaces get distinct keys")
 
 print("IndicatorLayout")
 let screen = YRect(x: 0, y: 0, w: 1600, h: 1000)
@@ -123,6 +132,9 @@ let vsfWins = [
 ]
 check(Set(VisibleSpaceFilter.apply(vsfWins).map { $0.id }) == [1, 2],
       "keeps occluded stack members on visible space, drops hidden-space windows")
+let stickyWin = YabaiWindow(id: 9, pid: 9, app: "S", title: "t", frame: YRect(x: 0, y: 0, w: 1, h: 1), display: 1, space: 5, stackIndex: 0, hasFocus: false, isVisible: true, isFloating: true, isSticky: true)
+check(Set(VisibleSpaceFilter.apply(vsfWins + [stickyWin]).map { $0.id }) == [1, 2],
+      "sticky window does not mark its reported (hidden) space visible")
 
 print("YabaiLocator")
 check(YabaiLocator.detect(candidates: ["/no/a", "/no/b"], exists: { _ in false }) == nil,
