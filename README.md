@@ -32,11 +32,13 @@ dock preview, window switcher, cmd-tab replacement, menu bar, Mission Control al
 
 It is a clean Swift rewrite — **not** a fork of stackline (which required Hammerspoon).
 
-## What's new — v0.2.15
+## What's new — v0.2.16
 
-- Closing a window from the Dock preview or the switcher now updates the panel
-  **instantly**; ✕ on an app's last window quits the app itself.
-- Switcher: **⌘W** closes the selected window, **⌘Q** quits its whole app.
+- New **click-through indicator** option: clicks reach the window under the
+  stack indicator (no hover/click on the indicator itself).
+- Fixed stack indicators that **lingered or showed the wrong stack**
+  (sticky windows, same-frame stacks on other spaces).
+- More reliable **SIP-free space moves**.
 - v0.2.12 introduced the **AltTab-style window switcher** (below).
 
 Full history: [CHANGELOG.md](CHANGELOG.md) ·

@@ -3,6 +3,18 @@
 All notable changes to yabai-dockstack. Full release notes and downloads live on
 the [GitHub Releases](https://github.com/z20240/yabai-dockstack/releases) page.
 
+## v0.2.16 — 2026-10-14
+
+- **Click-through stack indicator** — new Settings option: clicks pass through
+  the indicator to the window underneath (e.g. its close button); hover tooltips
+  and click-to-focus are turned off. Off by default. ([#2](https://github.com/z20240/yabai-dockstack/issues/2))
+- **Fixed stale / wrong stack indicators** — a sticky window (shown on all
+  spaces) no longer makes a hidden space count as visible, so its stacks aren't
+  drawn over the current one; indicators are no longer reused across spaces, so
+  they don't linger after a stack is closed or unstacked.
+- **More reliable SIP-free space moves** — the simulated drag verifies the window
+  actually lifts and probes grab points, aborting cleanly instead of bouncing.
+
 ## v0.2.15 — 2026-07-14
 
 - **Instant close sync** — closing a window from the Dock preview or the switcher

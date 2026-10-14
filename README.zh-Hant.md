@@ -28,10 +28,11 @@ dock 預覽、視窗切換器、cmd-tab 替代、選單列、Mission Control 替
 
 這是用 Swift 重寫的乾淨版本,**不是** stackline 的 fork(stackline 需要 Hammerspoon)。
 
-## 最新變更 — v0.2.15
+## 最新變更 — v0.2.16
 
-- 從 Dock 預覽或切換器關閉視窗,面板**即時**更新;✕ 關掉 app 最後一個視窗時直接結束該 App。
-- 切換器:**⌘W** 關閉選中視窗、**⌘Q** 結束整個 App。
+- 新增 **指示器可穿透點擊** 選項:點擊會傳到 stack 指示器下方的視窗(指示器本身不再懸停/點擊)。
+- 修正 stack 指示器**殘留或顯示錯誤 stack** 的問題(置頂視窗、其他空間同位置的 stack)。
+- **免 SIP 的空間移動**更穩定。
 - v0.2.12 新增 **AltTab 風格視窗切換器**(見下)。
 
 完整紀錄:[CHANGELOG.md](CHANGELOG.md) ·
