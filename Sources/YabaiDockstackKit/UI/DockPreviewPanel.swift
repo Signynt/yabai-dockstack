@@ -32,10 +32,11 @@ public final class DockPreviewPanel {
                      onClose: ((Int) -> Void)? = nil) {
         self.onClick = onClick
         self.onClose = onClose
-        let cellW: CGFloat = 200, cellH: CGFloat = 140, pad: CGFloat = 10, gap: CGFloat = 8
+        let cellW: CGFloat = 200, cellH: CGFloat = 140, gap: CGFloat = 8
         let n = max(items.count, 1)
-        let width = CGFloat(n) * cellW + CGFloat(n - 1) * gap + pad * 2
-        let height = cellH + pad * 2
+        let cellAreaWidth = CGFloat(n) * cellW + CGFloat(n - 1) * gap
+        let width = cellAreaWidth + 32
+        let height = cellH + 32
 
         var x = iconFrame.midX - width / 2
         var y = iconFrame.maxY + 8
@@ -49,19 +50,25 @@ public final class DockPreviewPanel {
         let p = panel ?? makePanel()
         p.setFrame(frame, display: true)
 
-        let content = FlippedView(frame: CGRect(origin: .zero, size: frame.size))
-        content.wantsLayer = true
-        content.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
-        content.layer?.cornerRadius = 10
+        let content = FlippedView(frame: CGRect(x: 16, y: 16,
+                                                width: cellAreaWidth, height: cellH))
         for (i, item) in items.enumerated() {
-            let cx = pad + CGFloat(i) * (cellW + gap)
-            let cell = PreviewCell(frame: CGRect(x: cx, y: pad, width: cellW, height: cellH),
+            let cx = CGFloat(i) * (cellW + gap)
+            let cell = PreviewCell(frame: CGRect(x: cx, y: 0, width: cellW, height: cellH),
                                    item: item,
                                    onClick: { [weak self] id in self?.onClick?(id) },
                                    onClose: onClose == nil ? nil : { [weak self] id in self?.onClose?(id) })
             content.addSubview(cell)
         }
-        p.contentView = content
+        let effect = NSVisualEffectView(frame: CGRect(origin: .zero, size: frame.size))
+        effect.material = .hudWindow
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        effect.wantsLayer = true
+        effect.layer?.cornerRadius = 16
+        effect.layer?.masksToBounds = true
+        effect.addSubview(content)
+        p.contentView = effect
         p.orderFrontRegardless()
         panel = p
         currentFrame = frame
@@ -88,9 +95,6 @@ final class PreviewCell: NSView {
     private let onClick: (Int) -> Void
     private let onClose: ((Int) -> Void)?
     private let closeButton = NSButton()
-    private static let idleBG = NSColor.white.withAlphaComponent(0.06).cgColor
-    private static let hoverBG = NSColor.white.withAlphaComponent(0.20).cgColor
-
     init(frame: NSRect, item: PreviewItem,
          onClick: @escaping (Int) -> Void, onClose: ((Int) -> Void)? = nil) {
         self.windowID = item.windowID
@@ -98,8 +102,8 @@ final class PreviewCell: NSView {
         self.onClose = onClose
         super.init(frame: frame)
         wantsLayer = true
-        layer?.backgroundColor = Self.idleBG
         layer?.cornerRadius = 6
+        applyAppearance()
 
         let imgView = NSImageView(frame: NSRect(x: 6, y: 24, width: frame.width - 12, height: frame.height - 30))
         imgView.imageScaling = .scaleProportionallyUpOrDown
@@ -110,7 +114,7 @@ final class PreviewCell: NSView {
         let label = NSTextField(labelWithString: "\(item.keyword)  ·  Space \(item.space)")
         toolTip = item.title
         label.font = .systemFont(ofSize: 11)
-        label.textColor = .white
+        label.textColor = .labelColor
         label.lineBreakMode = .byTruncatingTail
         label.frame = NSRect(x: 6, y: 4, width: frame.width - 12, height: 16)
         addSubview(label)
@@ -122,7 +126,7 @@ final class PreviewCell: NSView {
             closeButton.title = ""
             closeButton.image = NSImage(systemSymbolName: "xmark.circle.fill",
                                         accessibilityDescription: "Close window")
-            closeButton.contentTintColor = NSColor.white.withAlphaComponent(0.8)
+            closeButton.contentTintColor = .secondaryLabelColor
             closeButton.frame = NSRect(x: 5, y: frame.height - 23, width: 18, height: 18)
             closeButton.target = self
             closeButton.action = #selector(closeTapped)
@@ -132,8 +136,17 @@ final class PreviewCell: NSView {
     }
     required init?(coder: NSCoder) { fatalError() }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyAppearance()
+    }
+
+    private func applyAppearance() {
+        layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
+    }
+
     private func setHover(_ hovering: Bool) {
-        layer?.backgroundColor = hovering ? Self.hoverBG : Self.idleBG
+        layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(hovering ? 0.20 : 0.06).cgColor
         if onClose != nil { closeButton.isHidden = !hovering }
     }
 
