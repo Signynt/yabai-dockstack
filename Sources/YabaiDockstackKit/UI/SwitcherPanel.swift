@@ -68,7 +68,8 @@ public final class SwitcherPanel {
 
         let pad: CGFloat = 16
         let gap: CGFloat = 10
-        let headerH: CGFloat = query.isEmpty ? 0 : 32
+        // The search switcher always shows its search box; hold mode only once typing.
+        let headerH: CGFloat = query.isEmpty && !keyboardFocus ? 0 : 40
 
         cells = []
         itemIDs = items.map { $0.item.id }
@@ -182,11 +183,18 @@ public final class SwitcherPanel {
         }
 
         if headerH > 0 {
-            let q = NSTextField(labelWithString: "🔍 \(query)")
+            let box = NSView(frame: CGRect(x: 0, y: 0, width: contentSize.width, height: 30))
+            box.wantsLayer = true
+            box.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.16).cgColor
+            box.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+            box.layer?.borderWidth = 1
+            box.layer?.cornerRadius = 8
+            content.addSubview(box)
+            let q = NSTextField(labelWithString: "🔍 " + (query.isEmpty ? L10n.t("ui.switcher.searchPlaceholder") : query))
             q.font = .systemFont(ofSize: 14, weight: .medium)
-            q.textColor = .labelColor
+            q.textColor = query.isEmpty ? .tertiaryLabelColor : .labelColor
             q.lineBreakMode = .byTruncatingHead
-            q.frame = CGRect(x: 2, y: 4, width: contentSize.width - 4, height: 20)
+            q.frame = CGRect(x: 10, y: 5, width: contentSize.width - 20, height: 20)
             content.addSubview(q)
         }
 
@@ -335,9 +343,13 @@ public final class SwitcherPanel {
         }
 
         let visibleH = min(layout.size.height, maxH)
-        let holder = FlippedView(frame: CGRect(x: 0, y: 0, width: layout.size.width, height: visibleH + headerH))
-        if layout.size.height > visibleH {
-            let scroll = NSScrollView(frame: CGRect(x: 0, y: headerH, width: layout.size.width, height: visibleH))
+        let scrolls = layout.size.height > visibleH
+        // A legacy (always-shown) scroller takes width; widen so the cards aren't clipped.
+        let scrollerW = scrolls ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: NSScroller.preferredScrollerStyle) : 0
+        let holder = FlippedView(frame: CGRect(x: 0, y: 0, width: layout.size.width + scrollerW,
+                                               height: visibleH + headerH))
+        if scrolls {
+            let scroll = NSScrollView(frame: CGRect(x: 0, y: headerH, width: layout.size.width + scrollerW, height: visibleH))
             scroll.hasVerticalScroller = true
             scroll.drawsBackground = false
             scroll.documentView = body
