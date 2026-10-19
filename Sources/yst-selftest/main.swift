@@ -800,6 +800,34 @@ do {
           "drag reorder defaults on")
 }
 
+print("WindowFocuser")
+do {
+    func fakeYabai(focusExit: Int) -> String {
+        let path = NSTemporaryDirectory() + "fake-yabai-\(UUID().uuidString)"
+        let script = """
+        #!/bin/sh
+        case "$*" in
+          *--focus*) exit \(focusExit) ;;
+          *query*) echo '[{"id":7,"pid":42,"app":"Gather","frame":{"x":0,"y":0,"w":1,"h":1},"display":1,"space":1,"stack-index":0,"has-focus":false}]' ;;
+        esac
+        """
+        try? script.write(toFile: path, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        return path
+    }
+    var reopened: [Int] = []
+    WindowFocuser(client: YabaiClient(yabaiPath: fakeYabai(focusExit: 0)), reopen: { reopened.append($0) })
+        .focus(windowId: 7)
+    check(reopened.isEmpty, "focus success → no reopen")
+    WindowFocuser(client: YabaiClient(yabaiPath: fakeYabai(focusExit: 1)), reopen: { reopened.append($0) })
+        .focus(windowId: 7)
+    check(reopened == [42], "focus failure (tray window, no AX ref) → reopen owning app")
+    reopened = []
+    WindowFocuser(client: YabaiClient(yabaiPath: fakeYabai(focusExit: 1)), reopen: { reopened.append($0) })
+        .focus(windowId: 999)
+    check(reopened.isEmpty, "focus failure for unknown window → nothing")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

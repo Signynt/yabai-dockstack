@@ -6,6 +6,7 @@ import AppKit
 /// ticks (MRU + a warm window list so activation paints instantly).
 public final class SwitcherController {
     private let client: YabaiClient
+    private let focuser: WindowFocuser
     private let cache: ThumbnailCache
     private let capturer = ThumbnailCapturer()
     private let panel = SwitcherPanel()
@@ -35,7 +36,8 @@ public final class SwitcherController {
     /// reset the key tap's machine (e.g. after a mouse-click commit mid-hold).
     public var onDismiss: (() -> Void)?
 
-    public init(client: YabaiClient, cache: ThumbnailCache, config: AppConfig) {
+    public init(client: YabaiClient, cache: ThumbnailCache, config: AppConfig, focuser: WindowFocuser? = nil) {
+        self.focuser = focuser ?? WindowFocuser(client: client)
         self.client = client
         self.cache = cache
         self.config = config
@@ -128,7 +130,7 @@ public final class SwitcherController {
         lastCommitAt = Date()
         hide()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.client.focus(windowId: id)
+            self?.focuser.focus(windowId: id)
         }
     }
 

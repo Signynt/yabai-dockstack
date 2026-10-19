@@ -33,7 +33,11 @@ public enum YabaiDockstack {
         let client = YabaiClient(yabaiPath: resolvedYabai)
 
         let renderer = OverlayRenderer(config: config)
-        renderer.onClickWindow = { id in client.focus(windowId: id) }
+        let focuser = WindowFocuser(client: client)
+        func focusWindow(_ id: Int) {
+            DispatchQueue.global(qos: .userInitiated).async { focuser.focus(windowId: id) }
+        }
+        renderer.onClickWindow = { id in focusWindow(id) }
 
         // replay mode: render once from a JSON file, no live yabai
         if let idx = args.firstIndex(of: "--replay"), idx + 1 < args.count {
@@ -98,7 +102,8 @@ public enum YabaiDockstack {
         // plus a sticky mode reachable through the show-switcher socket command.
         // The tap is gated on yabai being present so a captured ⌘⇥ can never
         // black-hole the system switcher while yabai is down (5s heal re-checks).
-        let switcher = SwitcherController(client: client, cache: thumbCache, config: config)
+        let switcher = SwitcherController(client: client, cache: thumbCache, config: config,
+                                          focuser: focuser)
         let switcherTap = SwitcherKeyTap()
         switcher.onDismiss = { switcherTap.resetMachine() }
         func ensureSwitcherTap() {
@@ -173,7 +178,7 @@ public enum YabaiDockstack {
         menu.windowListProvider = {
             WindowMenuModel.build(client.queryWindows(), spaceLabels: client.querySpaceLabels())
         }
-        menu.onSelectWindow = { id in client.focus(windowId: id) }
+        menu.onSelectWindow = { id in focusWindow(id) }
         menu.permissionWarning = {
             (config.dockPreview && !PermissionsHelper.allGranted)
                 ? L10n.t("ui.menu.grantPerms") : nil
@@ -192,7 +197,7 @@ public enum YabaiDockstack {
         // The watcher needs Accessibility; Screen Recording only affects thumbnails.
         func ensureDockController() {
             if config.dockPreview, PermissionsHelper.hasAccessibility(), dockController == nil {
-                let dc = DockPreviewController(client: client, cache: thumbCache)
+                let dc = DockPreviewController(client: client, cache: thumbCache, focuser: focuser)
                 dc.start()
                 dockController = dc
             } else if !config.dockPreview, let dc = dockController {

@@ -24,8 +24,18 @@ public final class YabaiClient {
         return YabaiWindow.decodeList(data)
     }
 
-    public func focus(windowId: Int) {
-        _ = run(["-m", "window", "--focus", String(windowId)])
+    /// False when yabai couldn't focus it — e.g. a window an app closed to its
+    /// tray / menu bar: still listed, but without an AX reference.
+    @discardableResult
+    public func focus(windowId: Int) -> Bool {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: path)
+        proc.arguments = ["-m", "window", "--focus", String(windowId)]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
+        do { try proc.run() } catch { return false }
+        proc.waitUntilExit()
+        return proc.terminationStatus == 0
     }
 
     /// Swap two windows' positions (AX-based; also reorders windows inside a

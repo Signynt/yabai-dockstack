@@ -5,6 +5,7 @@ import CoreGraphics
 /// windows, show thumbnails (live → cached → icon), and focus on click.
 public final class DockPreviewController {
     private let client: YabaiClient
+    private let focuser: WindowFocuser
     private let cache: ThumbnailCache
     private let capturer = ThumbnailCapturer()
     private let panel = DockPreviewPanel()
@@ -18,7 +19,8 @@ public final class DockPreviewController {
     /// popover immediately (optimistic) until the queries catch up.
     private var pendingCloseIDs: Set<Int> = []
 
-    public init(client: YabaiClient, cache: ThumbnailCache) {
+    public init(client: YabaiClient, cache: ThumbnailCache, focuser: WindowFocuser? = nil) {
+        self.focuser = focuser ?? WindowFocuser(client: client)
         self.client = client
         self.cache = cache
     }
@@ -89,6 +91,10 @@ public final class DockPreviewController {
         if !region.contains(NSEvent.mouseLocation) { hidePanel() }
     }
 
+    private func focus(_ id: Int) {
+        DispatchQueue.global(qos: .userInitiated).async { [focuser] in focuser.focus(windowId: id) }
+    }
+
     private func icon(for win: YabaiWindow) -> NSImage {
         NSRunningApplication(processIdentifier: pid_t(win.pid))?.icon
             ?? NSWorkspace.shared.icon(for: .applicationBundle)
@@ -140,7 +146,7 @@ public final class DockPreviewController {
         // Show immediately with cached/icon, then refresh live thumbnails async.
         panel.show(items: items(for: wins), aboveIcon: hover.iconFrame,
                    onClick: { [weak self] id in
-                       self?.client.focus(windowId: id); self?.hidePanel()
+                       self?.focus(id); self?.hidePanel()
                    },
                    onClose: { [weak self] id in self?.closeWindow(id) })
         startKeepTimer()
@@ -154,7 +160,7 @@ public final class DockPreviewController {
                 guard self.panel.isVisible, self.iconFrame == hover.iconFrame else { return }
                 self.panel.show(items: self.items(for: wins), aboveIcon: hover.iconFrame,
                                 onClick: { [weak self] id in
-                                    self?.client.focus(windowId: id); self?.hidePanel()
+                                    self?.focus(id); self?.hidePanel()
                                 },
                                 onClose: { [weak self] id in self?.closeWindow(id) })
             }
