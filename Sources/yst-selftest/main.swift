@@ -968,47 +968,9 @@ do {
           "unfocusable (tray-closed) window → focusFailed, no simulated walk")
 }
 
-print("Drag to space: switcher sections")
-do {
-    func item(_ id: Int, space: Int, display: Int = 1) -> SwitcherItem {
-        SwitcherItem(id: id, pid: id, app: "A", title: "t\(id)", space: space, display: display, hasFocus: false)
-    }
-    let spaces = [SpaceInfo(index: 1, display: 1, isVisible: true), SpaceInfo(index: 2, display: 1, isVisible: false),
-                  SpaceInfo(index: 3, display: 2, isVisible: true)]
-    let s = SwitcherSections.build(items: [item(9, space: 3, display: 2), item(5, space: 1), item(4, space: 1)],
-                                   spaces: spaces, labels: [3: "web"])
-    check(s.map(\.space) == [1, 2, 3], "every space is a section, incl. empty, display order")
-    check(s.map(\.name) == ["Space 1", "Space 2", "web"], "section names (display named by its band)")
-    let fsp = [SpaceInfo(index: 1, display: 1, isVisible: true, hasFocus: true), SpaceInfo(index: 2, display: 1, isVisible: false),
-               SpaceInfo(index: 3, display: 2, isVisible: true)]
-    let fs3 = SwitcherSections.build(items: [], spaces: fsp, labels: [:])
-    check(fs3.map(\.hasFocus) == [true, false, false] && fs3.map(\.isVisible) == [true, false, true],
-          "sections mark the focused and visible spaces")
-    check(SpaceInfo.decodeList(Data(#"[{"index":1,"display":1,"has-focus":true},{"index":2,"display":1}]"#.utf8)).map(\.hasFocus) == [true, false],
-          "SpaceInfo decodes has-focus")
-    let band = SwitcherSections.layout(counts: [1, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
-                                       gap: 10, headerHeight: 20, emptyHeight: 30, maxWidth: 1000,
-                                       displays: [1, 1, 2], displayHeader: 24, displayPad: 10)
-    check(band.sections.map(\.origin) == [CGPoint(x: 10, y: 24), CGPoint(x: 130, y: 24), CGPoint(x: 10, y: 148)]
-          && band.displays == [CGRect(x: 0, y: 0, width: 240, height: 104), CGRect(x: 0, y: 124, width: 240, height: 104)]
-          && band.size == CGSize(width: 240, height: 228), "each display gets its own band of space cards")
-    check(s.first?.items.map(\.id) == [5, 4], "MRU order kept inside a section")
-    let wide = SwitcherSections.layout(counts: [3, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
-                                       gap: 10, headerHeight: 20, emptyHeight: 30, maxWidth: 1000)
-    check(wide.sections.map(\.minX) == [0, 230, 350] && wide.size == CGSize(width: 450, height: 130),
-          "space cards flow left to right")
-    check(wide.cells[3] == CGRect(x: 350, y: 20, width: 100, height: 50), "cells placed inside their card")
-    let l = SwitcherSections.layout(counts: [3, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
-                                    gap: 10, headerHeight: 20, emptyHeight: 30, maxWidth: 300)
-    check(l.sections.map(\.origin) == [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 150), CGPoint(x: 120, y: 150)],
-          "cards wrap to a new row when out of width")
-    check(SwitcherSections.verticalNeighbor(of: 2, up: true, cells: l.cells) == 0, "↑ to nearest cell above")
-    check(SwitcherSections.verticalNeighbor(of: 2, up: false, cells: l.cells) == 3, "↓ into the next row of cards")
-    check(SwitcherSections.verticalNeighbor(of: 3, up: false, cells: l.cells) == nil, "↓ at bottom stays")
-    check(SwitcherSections.section(at: CGPoint(x: 50, y: 160), layout: l) == 1, "drop on an empty space card")
-    check(SwitcherSections.section(at: CGPoint(x: 250, y: 160), layout: l) == nil, "drop in a gap → nil")
-    check(SwitcherSections.section(at: CGPoint(x: 50, y: 400), layout: l) == nil, "drop outside sections → nil")
-}
+print("SpaceInfo focus")
+check(SpaceInfo.decodeList(Data(#"[{"index":1,"display":1,"has-focus":true},{"index":2,"display":1}]"#.utf8)).map(\.hasFocus) == [true, false],
+      "SpaceInfo decodes has-focus")
 
 print("Drag to space: strip")
 do {
@@ -1054,12 +1016,6 @@ do {
     WindowSpaceMover(client: c2, spaceMover: SpaceMover(client: c2), saAvailable: { true }).moveNow(windowId: 7, toSpace: 3)
     check(!((try? String(contentsOfFile: l2, encoding: .utf8)) ?? "").contains("--space"),
           "SA path: focus failed → nothing is sent away")
-    let fs = [SpaceInfo(index: 1, display: 1, isVisible: true), SpaceInfo(index: 2, display: 1, isVisible: false, isNativeFullscreen: true)]
-    check(SwitcherSections.build(items: [], spaces: fs, labels: [:]).map(\.space) == [1], "fullscreen spaces aren't switcher drop targets")
-    let wl = SwitcherSections.layout(counts: [3, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
-                                     gap: 10, headerHeight: 20, emptyHeight: 30, maxWidth: 1000)
-    check(SwitcherSections.section(at: CGPoint(x: 50, y: 100), layout: wl, visible: CGRect(x: 0, y: 0, width: 450, height: 60)) == nil,
-          "scrolled-away cards aren't drop targets")
     let ranges = [(space: 1, minX: 0.0, maxX: 100.0), (space: 2, minX: 110.0, maxX: 200.0)]
     check(WindowStripModel.dropSpace(x: 150, y: -200, height: 20, sections: ranges) == nil, "strip: drop far below cancels")
     check(WindowStripModel.dropSpace(x: 150, y: 10, height: 20, sections: ranges) == 2, "strip: drop on the strip lands")

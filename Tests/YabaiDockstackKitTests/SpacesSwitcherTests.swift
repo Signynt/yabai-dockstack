@@ -30,6 +30,11 @@ final class SpacesSwitcherTests: XCTestCase {
         XCTAssertEqual(SpacesSwitcherModel.selectable(cards).map(\.id), [11, 31])
     }
 
+    func testSpaceInfoDecodesFocus() {
+        let json = #"[{"index":1,"display":1,"is-visible":true,"has-focus":true},{"index":2,"display":1}]"#
+        XCTAssertEqual(SpaceInfo.decodeList(Data(json.utf8)).map(\.hasFocus), [true, false])
+    }
+
     func testSpatialNav() {
         let rects = [CGRect(x: 0, y: 0, width: 100, height: 50), CGRect(x: 120, y: 0, width: 100, height: 50),
                      CGRect(x: 10, y: 80, width: 100, height: 50)]

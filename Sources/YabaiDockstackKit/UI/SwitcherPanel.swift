@@ -30,23 +30,6 @@ public final class SwitcherPanel {
 
     /// Columns of the current grid — the controller uses this for ↑/↓ movement.
     public private(set) var columns = 1
-    /// Sectioned (sticky) layout: cell frames for ↑/↓, nil in flat mode.
-    public private(set) var cellFrames: [CGRect]?
-    /// A cell was dragged onto another space's card: (window id, space).
-    public var onDropToSpace: ((Int, Int) -> Void)?
-    /// A drag ended without a drop (re-render now if one was deferred).
-    public var onDragEnded: (() -> Void)?
-    public var isDragging: Bool { dragWindowId != nil }
-    private var itemIDs: [Int] = []
-    private var dragWindowId: Int?
-
-    private var sectionLayout: SectionLayout?
-    private var sectionSpaces: [Int] = []
-    private var sectionHeaders: [NSTextField] = []
-    private var sectionHeaderColors: [NSColor] = []
-    private weak var sectionBody: NSView?
-    private var dragGhost: NSImageView?
-    private var dragSource: Int?
 
     private var panel: SwitcherKeyPanel?
     private var cells: [SwitcherCellView] = []
@@ -56,8 +39,7 @@ public final class SwitcherPanel {
     public var isVisible: Bool { panel?.isVisible ?? false }
 
     public func show(items: [SwitcherDisplayItem], appearance: SwitcherAppearance,
-                     selection: Int, query: String, keyboardFocus: Bool,
-                     sections: [SwitcherSection]? = nil) {
+                     selection: Int, query: String, keyboardFocus: Bool) {
         let p = panel ?? makePanel()
         panel = p
 
@@ -72,20 +54,10 @@ public final class SwitcherPanel {
         let headerH: CGFloat = query.isEmpty && !keyboardFocus ? 0 : 40
 
         cells = []
-        itemIDs = items.map { $0.item.id }
-        cellFrames = nil
-        sectionLayout = nil
-        sectionHeaders = []
-        sectionHeaderColors = []
-        endDrag()
         let content: NSView
         var contentSize: CGSize
 
-        if let sections, !sections.isEmpty {
-            (content, contentSize) = buildSectioned(items: items, sections: sections, appearance: appearance,
-                                                    selection: selection, maxW: maxW - pad * 2,
-                                                    maxH: maxH - pad * 2 - headerH, headerH: headerH, gap: gap)
-        } else if items.isEmpty {
+        if items.isEmpty {
             columns = 1
             let label = NSTextField(labelWithString: L10n.t("ui.switcher.noWindows"))
             label.font = .systemFont(ofSize: 14)
@@ -182,21 +154,7 @@ public final class SwitcherPanel {
             }
         }
 
-        if headerH > 0 {
-            let box = NSView(frame: CGRect(x: 0, y: 0, width: contentSize.width, height: 30))
-            box.wantsLayer = true
-            box.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.16).cgColor
-            box.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
-            box.layer?.borderWidth = 1
-            box.layer?.cornerRadius = 8
-            content.addSubview(box)
-            let q = NSTextField(labelWithString: "🔍 " + (query.isEmpty ? L10n.t("ui.switcher.searchPlaceholder") : query))
-            q.font = .systemFont(ofSize: 14, weight: .medium)
-            q.textColor = query.isEmpty ? .tertiaryLabelColor : .labelColor
-            q.lineBreakMode = .byTruncatingHead
-            q.frame = CGRect(x: 10, y: 5, width: contentSize.width - 20, height: 20)
-            content.addSubview(q)
-        }
+        if headerH > 0 { addSwitcherSearchBox(to: content, width: contentSize.width, query: query) }
 
         let shell = RoundedPanelView(frame: CGRect(x: 0, y: 0,
                                width: contentSize.width + pad * 2,
@@ -224,197 +182,6 @@ public final class SwitcherPanel {
             p.orderFrontRegardless()
         }
         scrollSelectionIntoView(selection)
-    }
-
-    // MARK: - Sectioned (sticky) mode
-
-    private func buildSectioned(items: [SwitcherDisplayItem], sections: [SwitcherSection],
-                                appearance: SwitcherAppearance, selection: Int, maxW: CGFloat,
-                                maxH: CGFloat, headerH: CGFloat, gap: CGFloat) -> (NSView, CGSize) {
-        let titleH: Double = 22, emptyH: Double = 40
-        let cols: Int, cell: CGSize
-        switch appearance {
-        case .thumbnails, .icons:
-            let base: (w: Double, minW: Double, label: Double) = appearance == .thumbnails
-                ? (240, 128, 24) : (136, 104, 44)
-            // Size cells as if every window (plus a header per card) shared one grid.
-            let grid = SwitcherLayout.grid(count: max(items.count + sections.count, 1), maxWidth: Double(maxW),
-                                           maxHeight: Double(maxH),
-                                           baseCellWidth: base.w, minCellWidth: base.minW,
-                                           labelHeight: base.label, gap: Double(gap))
-            cols = 3  // per space card; cards themselves flow across the panel
-            cell = CGSize(width: grid.cellWidth, height: grid.cellHeight)
-        case .titles:
-            cols = 1
-            cell = CGSize(width: min(CGFloat(640), maxW), height: 30)
-        }
-        columns = cols
-        let displays = sections.map(\.display)
-        let multiDisplay = Set(displays).count > 1
-        let layout = SwitcherSections.layout(counts: sections.map { $0.items.count }, columns: cols,
-                                             cell: cell, gap: Double(gap), headerHeight: titleH,
-                                             emptyHeight: emptyH, maxWidth: Double(maxW),
-                                             displays: multiDisplay ? displays : [],
-                                             displayHeader: 26, displayPad: 12)
-        sectionLayout = layout
-        sectionSpaces = sections.map(\.space)
-        cellFrames = layout.cells
-
-        let body = FlippedView(frame: CGRect(origin: .zero, size: layout.size))
-        sectionBody = body
-        // One band per display, its number in the corner.
-        let orderedDisplays = displays.reduce(into: [Int]()) { if $0.last != $1 { $0.append($1) } }
-        for (bi, band) in layout.displays.enumerated() {
-            let v = NSView(frame: band)
-            v.wantsLayer = true
-            v.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.16).cgColor
-            v.layer?.borderColor = NSColor.white.withAlphaComponent(0.10).cgColor
-            v.layer?.borderWidth = 1
-            v.layer?.cornerRadius = 14
-            body.addSubview(v)
-            let n = orderedDisplays.indices.contains(bi) ? orderedDisplays[bi] : bi + 1
-            let label = NSTextField(labelWithString: String(format: L10n.t("ui.menu.displayN"), n))
-            label.font = .systemFont(ofSize: 12, weight: .bold)
-            label.textColor = .labelColor
-            label.sizeToFit()
-            label.frame.origin = CGPoint(x: band.minX + 12, y: band.minY + (26 - label.frame.height) / 2 + 2)
-            body.addSubview(label)
-        }
-        for (si, section) in sections.enumerated() {
-            let h = layout.headers[si]
-            let card = NSView(frame: layout.sections[si].insetBy(dx: -4, dy: -2))
-            card.wantsLayer = true
-            card.layer?.cornerRadius = 10
-            card.layer?.backgroundColor = NSColor.white.withAlphaComponent(section.hasFocus ? 0.12 : 0.05).cgColor
-            if section.hasFocus {
-                card.layer?.borderColor = NSColor.systemGreen.cgColor
-                card.layer?.borderWidth = 2
-            } else if section.isVisible {
-                card.layer?.borderColor = NSColor.white.withAlphaComponent(0.3).cgColor
-                card.layer?.borderWidth = 1
-            }
-            body.addSubview(card)
-            // "Current" (the space you're on) / "Visible" (on screen on another display).
-            var tagW: CGFloat = 0
-            if section.hasFocus || section.isVisible {
-                let tag = NSTextField(labelWithString: L10n.t(section.hasFocus ? "ui.switcher.currentSpace"
-                                                                               : "ui.switcher.visibleSpace"))
-                tag.font = .systemFont(ofSize: 10, weight: .bold)
-                tag.textColor = section.hasFocus ? .white : .labelColor
-                tag.alignment = .center
-                tag.wantsLayer = true
-                tag.layer?.cornerRadius = 4
-                tag.layer?.backgroundColor = (section.hasFocus ? NSColor.systemGreen
-                                              : NSColor.white.withAlphaComponent(0.18)).cgColor
-                tag.sizeToFit()
-                tagW = tag.frame.width + 10
-                tag.frame = CGRect(x: h.maxX - tagW, y: h.minY + (h.height - tag.frame.height) / 2,
-                                   width: tagW, height: tag.frame.height)
-                body.addSubview(tag)
-            }
-            let title = NSTextField(labelWithString: section.name)
-            let color: NSColor = section.hasFocus ? .labelColor : .secondaryLabelColor
-            title.font = .systemFont(ofSize: 12, weight: .semibold)
-            title.textColor = color
-            title.lineBreakMode = .byTruncatingTail
-            title.wantsLayer = true
-            title.layer?.cornerRadius = 4
-            title.frame = CGRect(x: h.minX, y: h.minY + 2, width: max(h.width - tagW - 4, 20), height: h.height - 4)
-            body.addSubview(title)
-            sectionHeaders.append(title)
-            sectionHeaderColors.append(color)
-            if section.items.isEmpty {
-                let hint = NSTextField(labelWithString: L10n.t("ui.switcher.emptySpace"))
-                hint.font = .systemFont(ofSize: 11)
-                hint.textColor = .tertiaryLabelColor
-                hint.sizeToFit()
-                hint.frame.origin = CGPoint(x: h.minX + 8, y: h.maxY + (CGFloat(emptyH) - hint.frame.height) / 2)
-                body.addSubview(hint)
-            }
-        }
-        for (i, di) in items.enumerated() where i < layout.cells.count {
-            let c = SwitcherCellView(frame: layout.cells[i], index: i, item: di, mode: appearance,
-                                     onHover: { [weak self] in self?.onHover?($0) },
-                                     onClick: { [weak self] in self?.onClick?($0) },
-                                     onClose: { [weak self] in self?.onCloseItem?($0) })
-            c.isSelected = i == selection
-            c.onDrag = { [weak self] idx, phase, ev in self?.handleDrag(idx, phase, ev) }
-            cells.append(c)
-            body.addSubview(c)
-        }
-
-        let visibleH = min(layout.size.height, maxH)
-        let scrolls = layout.size.height > visibleH
-        // A legacy (always-shown) scroller takes width; widen so the cards aren't clipped.
-        let scrollerW = scrolls ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: NSScroller.preferredScrollerStyle) : 0
-        let holder = FlippedView(frame: CGRect(x: 0, y: 0, width: layout.size.width + scrollerW,
-                                               height: visibleH + headerH))
-        if scrolls {
-            let scroll = NSScrollView(frame: CGRect(x: 0, y: headerH, width: layout.size.width + scrollerW, height: visibleH))
-            scroll.hasVerticalScroller = true
-            scroll.drawsBackground = false
-            scroll.documentView = body
-            holder.addSubview(scroll)
-        } else {
-            body.frame.origin.y = headerH
-            holder.addSubview(body)
-        }
-        return (holder, holder.frame.size)
-    }
-
-    private func handleDrag(_ index: Int, _ phase: SwitcherCellView.DragPhase, _ event: NSEvent) {
-        guard let body = sectionBody, let layout = sectionLayout,
-              let root = panel?.contentView, cells.indices.contains(index) else { return }
-        switch phase {
-        case .began:
-            dragSource = index
-            dragWindowId = itemIDs.indices.contains(index) ? itemIDs[index] : nil  // by id, not index
-            let cell = cells[index]
-            if let rep = cell.bitmapImageRepForCachingDisplay(in: cell.bounds) {
-                cell.cacheDisplay(in: cell.bounds, to: rep)
-                let img = NSImage(size: cell.bounds.size)
-                img.addRepresentation(rep)
-                let ghost = NSImageView(frame: CGRect(origin: .zero, size: cell.bounds.size))
-                ghost.image = img
-                ghost.alphaValue = 0.75
-                root.addSubview(ghost)
-                dragGhost = ghost
-            }
-            cell.alphaValue = 0.35
-        case .moved:
-            let p = root.convert(event.locationInWindow, from: nil)
-            dragGhost?.frame.origin = CGPoint(x: p.x - (dragGhost?.frame.width ?? 0) / 2,
-                                              y: p.y - (dragGhost?.frame.height ?? 0) / 2)
-            let hovered = SwitcherSections.section(at: body.convert(event.locationInWindow, from: nil),
-                                                   layout: layout, visible: body.visibleRect)
-            for (i, h) in sectionHeaders.enumerated() {
-                h.layer?.backgroundColor = i == hovered
-                    ? NSColor.controlAccentColor.withAlphaComponent(0.35).cgColor : nil
-                h.textColor = i == hovered ? .labelColor : sectionHeaderColors[i]
-            }
-        case .ended:
-            let target = SwitcherSections.section(at: body.convert(event.locationInWindow, from: nil),
-                                                  layout: layout, visible: body.visibleRect)
-            let id = dragWindowId
-            endDrag()
-            if let target, let id, sectionSpaces.indices.contains(target) {
-                onDropToSpace?(id, sectionSpaces[target])
-            } else {
-                onDragEnded?()
-            }
-        }
-    }
-
-    private func endDrag() {
-        dragGhost?.removeFromSuperview()
-        dragGhost = nil
-        if let src = dragSource, cells.indices.contains(src) { cells[src].alphaValue = 1 }
-        dragSource = nil
-        dragWindowId = nil
-        for (i, h) in sectionHeaders.enumerated() {
-            h.layer?.backgroundColor = nil
-            h.textColor = sectionHeaderColors[i]
-        }
     }
 
     public func updateSelection(_ index: Int) {
@@ -651,30 +418,23 @@ final class SwitcherCellView: NSView {
 
     /// Set in sticky (sectioned) mode: a press that moves past the threshold
     /// becomes a drag instead of a click.
-    var onDrag: ((_ index: Int, _ phase: DragPhase, _ event: NSEvent) -> Void)?
-    enum DragPhase { case began, moved, ended }
-    private var pressPoint: NSPoint?
-    private var dragging = false
-
-    override func mouseDown(with event: NSEvent) {
-        guard onDrag != nil else { onClick(index); return }  // hold mode: click on press
-        pressPoint = event.locationInWindow
-        dragging = false
-    }
-    override func mouseDragged(with event: NSEvent) {
-        guard let onDrag, let start = pressPoint else { return }
-        let p = event.locationInWindow
-        if !dragging {
-            guard abs(p.x - start.x) + abs(p.y - start.y) > 4 else { return }
-            dragging = true
-            onDrag(index, .began, event)
-        }
-        onDrag(index, .moved, event)
-    }
-    override func mouseUp(with event: NSEvent) {
-        guard onDrag != nil, pressPoint != nil else { return }
-        pressPoint = nil
-        if dragging { dragging = false; onDrag?(index, .ended, event) } else { onClick(index) }
-    }
+    override func mouseDown(with event: NSEvent) { onClick(index) }
     @objc private func closeTapped() { onClose(index) }
+}
+
+/// The switcher's search box (top of the content, flipped coordinates).
+func addSwitcherSearchBox(to content: NSView, width: CGFloat, query: String) {
+    let box = NSView(frame: CGRect(x: 0, y: 0, width: width, height: 30))
+    box.wantsLayer = true
+    box.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.16).cgColor
+    box.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+    box.layer?.borderWidth = 1
+    box.layer?.cornerRadius = 8
+    content.addSubview(box)
+    let q = NSTextField(labelWithString: "🔍 " + (query.isEmpty ? L10n.t("ui.switcher.searchPlaceholder") : query))
+    q.font = .systemFont(ofSize: 14, weight: .medium)
+    q.textColor = query.isEmpty ? .tertiaryLabelColor : .labelColor
+    q.lineBreakMode = .byTruncatingHead
+    q.frame = CGRect(x: 10, y: 5, width: width - 20, height: 20)
+    content.addSubview(q)
 }

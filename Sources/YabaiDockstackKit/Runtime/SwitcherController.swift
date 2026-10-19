@@ -11,6 +11,8 @@ public final class SwitcherController {
     private let capturer = ThumbnailCapturer()
     private let visibilityProbe = WindowVisibilityProbe()
     private let panel = SwitcherPanel()
+    /// The search (sticky) switcher's view: PR #4's Spaces View look.
+    private let spacesPanel = SpacesPanel()
     private var config: AppConfig
 
     private var mru = MRUOrder()
@@ -32,17 +34,24 @@ public final class SwitcherController {
     /// until it actually moves, so a stationary mouse can't hijack the
     /// keyboard selection when tracking areas rebuild.
     private var pointerGate: CGPoint?
-    /// Sticky (search) mode groups windows by space so they can be dragged
-    /// between spaces; nil in hold mode.
-    private var sections: [SwitcherSection]?
+    /// Sticky (search) mode shows one card per space so windows (and whole
+    /// spaces) can be dragged between them; nil in hold mode.
+    private var cards: [SpaceCard]?
     private var spaces: [SpaceInfo] = []
     private var spaceLabels: [Int: String] = [:]
+    private var wallpaper: NSImage?
+    private var wallpaperGeneration = 0
 
     /// A refresh arrived mid-drag: replacing the cells would break the drag,
     /// so render once it ends.
     private var renderPending = false
-    /// A window was dropped onto another space's section: (window id, space).
-    public var onDropToSpace: ((Int, Int) -> Void)?
+    /// Our own SA move can activate another app; that resign-key must not
+    /// close the panel.
+    private var ignoreResignUntil: Date?
+    /// Moves dropped windows / swaps spaces. Set by the app.
+    public var mover: WindowSpaceMover?
+    /// SIP doesn't change without a reboot: probe once.
+    private lazy var saAvailable: Bool = SAProbe.current()
 
     /// Fired whenever the panel closes for any reason; the app uses it to
     /// reset the key tap's machine (e.g. after a mouse-click commit mid-hold).
@@ -64,27 +73,50 @@ public final class SwitcherController {
         }
         panel.onClick = { [weak self] idx in self?.select(idx); self?.commit() }
         panel.onCloseItem = { [weak self] idx in self?.close(index: idx) }
-        panel.onDropToSpace = { [weak self] id, space in
-            guard let self else { return }
-            self.renderPending = false
-            self.hide()  // the SIP-free move needs the real window, not our panel, under the cursor
-            self.onDropToSpace?(id, space)
-        }
-        panel.onDragEnded = { [weak self] in
-            guard let self, self.renderPending else { return }
-            self.renderPending = false
-            self.render()
-        }
         panel.onKeyEvent = { [weak self] ev in self?.handleStickyKey(ev) ?? false }
         panel.onResignKey = { [weak self] in
             guard let self, self.sticky else { return }
             self.cancel()
         }
+        spacesPanel.onHover = { [weak self] id in
+            guard let self, let idx = self.items.firstIndex(where: { $0.id == id }) else { return }
+            self.panel.onHover?(idx)
+        }
+        spacesPanel.onClick = { [weak self] id in
+            guard let self, let idx = self.items.firstIndex(where: { $0.id == id }) else { return }
+            self.select(idx)
+            self.commit()
+        }
+        spacesPanel.onCloseItem = { [weak self] id in
+            guard let self, let idx = self.items.firstIndex(where: { $0.id == id }) else { return }
+            self.close(index: idx)
+        }
+        spacesPanel.onWindowDrop = { [weak self] id, space in self?.dropWindow(id, on: space) }
+        spacesPanel.onSpaceDrop = { [weak self] a, b in self?.swapSpaces(a, b) }
+        spacesPanel.onSpaceClick = { [weak self] space in self?.clickSpace(space) }
+        spacesPanel.onDragEnded = { [weak self] in
+            guard let self, self.renderPending else { return }
+            self.renderPending = false
+            self.render()
+        }
+        spacesPanel.onKeyEvent = { [weak self] ev in self?.handleStickyKey(ev) ?? false }
+        spacesPanel.onResignKey = { [weak self] in
+            guard let self, self.sticky else { return }
+            if let until = self.ignoreResignUntil, Date() < until {
+                self.spacesPanel.regainKey()
+            } else {
+                self.cancel()
+            }
+        }
+        refreshWallpaper()
     }
 
-    public func updateConfig(_ c: AppConfig) { config = c }
+    public func updateConfig(_ c: AppConfig) {
+        config = c
+        refreshWallpaper()
+    }
 
-    public var isOpen: Bool { panel.isVisible }
+    public var isOpen: Bool { panel.isVisible || spacesPanel.isVisible }
 
     private func displayableWindows(_ wins: [YabaiWindow]) -> [YabaiWindow] {
         let filtered = visibilityProbe.liveWindowIDs(wins).map { ids in
@@ -146,15 +178,16 @@ public final class SwitcherController {
     public func cycle(forward: Bool) {
         guard !items.isEmpty else { return }
         selection = (selection + (forward ? 1 : items.count - 1)) % items.count
-        panel.updateSelection(selection)
+        showSelection()
     }
 
     public func move(dx: Int, dy: Int) {
         guard !items.isEmpty else { return }
-        if dy != 0, let frames = panel.cellFrames {  // sectioned: rows differ per section
-            if let n = SwitcherSections.verticalNeighbor(of: selection, up: dy < 0, cells: frames) {
+        if dy != 0, cards != nil {  // tiles aren't on a grid: nearest one above / below
+            let rects = items.map { spacesPanel.tileFrames[$0.id] ?? .zero }
+            if let n = SpatialNav.neighbor(of: selection, up: dy < 0, rects: rects) {
                 selection = n
-                panel.updateSelection(selection)
+                showSelection()
             }
             return
         }
@@ -166,11 +199,12 @@ public final class SwitcherController {
             return                                       // vertical clamps
         }
         selection = next
-        panel.updateSelection(selection)
+        showSelection()
     }
 
     public func commit() {
-        guard items.indices.contains(selection) else { cancel(); return }
+        // Search switcher with nothing matching: Enter does nothing.
+        guard items.indices.contains(selection) else { if !sticky { cancel() }; return }
         let id = items[selection].id
         mru.touch(id)
         lastCommitID = id
@@ -194,11 +228,15 @@ public final class SwitcherController {
                                     scope: scope, query: query)
             .filter { !pendingCloseIDs.contains($0.id) }
         if sticky, !spaces.isEmpty {
-            let s = SwitcherSections.build(items: items, spaces: spaces, labels: spaceLabels)
-            sections = s
-            items = s.flatMap(\.items)
+            // Every window gets a tile; the query only decides which are lit.
+            let all = SwitcherModel.build(windows: lastWindows, mru: mru.ids, scope: scope, query: "")
+                .filter { !pendingCloseIDs.contains($0.id) }
+            let c = SpacesSwitcherModel.build(items: all, windows: lastWindows, spaces: spaces,
+                                              labels: spaceLabels, matching: Set(items.map(\.id)))
+            cards = c
+            items = SpacesSwitcherModel.selectable(c)
         } else {
-            sections = nil
+            cards = nil
         }
     }
 
@@ -213,32 +251,119 @@ public final class SwitcherController {
     }
 
     private func render() {
-        if panel.isDragging { renderPending = true; return }
+        if spacesPanel.isDragging { renderPending = true; return }
         pointerGate = NSEvent.mouseLocation
-        panel.show(items: displayItems(),
-                   appearance: SwitcherAppearance(rawValue: config.switcherAppearance) ?? .thumbnails,
-                   selection: selection, query: query, keyboardFocus: sticky,
-                   sections: sections)
+        if let cards {
+            let ids = cards.flatMap { $0.tiles.map(\.item.id) }
+            let thumbs = Dictionary(ids.compactMap { id in cache.get(id).map { (id, $0) } },
+                                    uniquingKeysWith: { a, _ in a })
+            spacesPanel.show(cards: cards, thumbnails: thumbs, wallpaper: config.switcherWallpaper ? wallpaper : nil,
+                             query: query, selectedID: items.indices.contains(selection) ? items[selection].id : nil)
+        } else {
+            panel.show(items: displayItems(),
+                       appearance: SwitcherAppearance(rawValue: config.switcherAppearance) ?? .thumbnails,
+                       selection: selection, query: query, keyboardFocus: sticky)
+        }
     }
 
     private func hide() {
         generation += 1
         sticky = false
+        ignoreResignUntil = nil
+        renderPending = false
         panel.hide()
+        spacesPanel.hide()
         onDismiss?()
     }
 
     private func select(_ idx: Int) {
         guard items.indices.contains(idx), idx != selection else { return }
         selection = idx
-        panel.updateSelection(selection)
+        showSelection()
+    }
+
+    private func showSelection() {
+        if cards != nil {
+            spacesPanel.updateSelection(items.indices.contains(selection) ? items[selection].id : nil)
+        } else {
+            panel.updateSelection(selection)
+        }
+    }
+
+    // MARK: - Search switcher: moves, swaps, card clicks
+
+    private func dropWindow(_ id: Int, on space: Int) {
+        guard let mover, lastWindows.contains(where: { $0.id == id }) else { return }
+        renderPending = false
+        if saAvailable && !config.switcherFollowMove {
+            // Instant yabai move: stay open so several windows can be moved.
+            ignoreResignUntil = Date().addingTimeInterval(1)
+            mover.move(windowId: id, toSpace: space, follow: false) { [weak self] in self?.afterMutation() }
+        } else {
+            hide()  // the SIP-free walk needs the real window, not our panel, under the cursor
+            mover.move(windowId: id, toSpace: space, follow: true)
+        }
+    }
+
+    private func swapSpaces(_ a: Int, _ b: Int) {
+        let fullscreen = Set(spaces.filter(\.isNativeFullscreen).map(\.index))
+        guard let mover, SpacesInteraction.swapAllowed(source: a, target: b, saAvailable: saAvailable,
+                                                        fullscreen: fullscreen) else { return }
+        ignoreResignUntil = Date().addingTimeInterval(1)
+        mover.swapSpaces(a, b) { [weak self] in self?.afterMutation() }
+    }
+
+    private func clickSpace(_ space: Int) {
+        let inSpace = Set(lastWindows.filter { $0.space == space }.map(\.id))
+        let action = SpacesInteraction.cardClick(space: space, saAvailable: saAvailable,
+                                                 recentWindowInSpace: mru.ids.first { inSpace.contains($0) })
+        guard action != .nothing else { return }
+        hide()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            switch action {
+            case .focusSpace(let s): self.client.focus(spaceId: s)
+            case .focusWindow(let id): self.focuser.focus(windowId: id)
+            case .nothing: break
+            }
+        }
+    }
+
+    private func afterMutation() {
+        guard spacesPanel.isVisible else { return }
+        spacesPanel.regainKey()
+        refreshAsync()
+    }
+
+    /// The space you're on changed (e.g. a swipe) while the panel is open.
+    public func noteActiveSpaceChanged() {
+        guard spacesPanel.isVisible else { return }
+        refreshAsync()
+    }
+
+    /// (Re)load the configured wallpaper — dark variant in dark mode.
+    public func refreshWallpaper() {
+        wallpaperGeneration += 1
+        let request = wallpaperGeneration
+        let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let path = dark && !config.switcherWallpaperDarkPath.isEmpty
+            ? config.switcherWallpaperDarkPath : config.switcherWallpaperPath
+        guard config.switcherWallpaper, !path.isEmpty else { wallpaper = nil; return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let image = NSImage(contentsOfFile: path)
+            DispatchQueue.main.async {
+                guard let self, request == self.wallpaperGeneration else { return }
+                self.wallpaper = image
+                if self.spacesPanel.isVisible { self.render() }
+            }
+        }
     }
 
     /// Drop the pending-close cells right away; hide when nothing is left.
     private func applyPendingRemoval() {
         rebuildItems()
-        if items.isEmpty { hide(); return }
-        selection = min(selection, items.count - 1)
+        if items.isEmpty && !sticky { hide(); return }
+        selection = max(0, min(selection, items.count - 1))
         render()
     }
 
@@ -348,7 +473,10 @@ public final class SwitcherController {
 
     private func queryChanged() {
         rebuildItems()
-        selection = 0
+        // The best match by recency, wherever its card sits.
+        let first = SwitcherModel.build(windows: lastWindows, mru: mru.ids, scope: scope, query: query)
+            .first { !pendingCloseIDs.contains($0.id) }
+        selection = first.flatMap { f in items.firstIndex { $0.id == f.id } } ?? 0
         render()
     }
 }

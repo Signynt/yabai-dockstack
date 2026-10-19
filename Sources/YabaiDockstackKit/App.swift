@@ -187,7 +187,7 @@ public enum YabaiDockstack {
         }
         let spaceMover = SpaceMover(client: client)
         let windowSpaceMover = WindowSpaceMover(client: client, spaceMover: spaceMover)
-        switcher.onDropToSpace = { id, space in windowSpaceMover.move(windowId: id, toSpace: space) }
+        switcher.mover = windowSpaceMover
         strip.onDropToSpace = { id, space in windowSpaceMover.move(windowId: id, toSpace: space) }
         let menu = MenuBarController()
         let listener = SignalListener(
@@ -299,8 +299,12 @@ public enum YabaiDockstack {
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil, queue: .main) { _ in
+                switcher.noteActiveSpaceChanged()
                 coordinator.requestRefresh()
             }
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil, queue: .main) { _ in switcher.refreshWallpaper() }
 
         ensureDockController()
         ensureSwitcherTap()

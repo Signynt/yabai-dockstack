@@ -1,242 +1,240 @@
 import AppKit
 import CoreGraphics
 
+/// The search switcher's view (PR #4's Spaces View look): a search box, then
+/// one titled section per display with a mini-desktop card per space; windows
+/// are tiled inside their card. Tiles and cards can be dragged onto other
+/// cards. Keyboard handling lives in `SwitcherController`.
 public final class SpacesPanel {
-    public var onWindowClick: ((Int) -> Void)?
+    public var onHover: ((Int) -> Void)?
+    public var onClick: ((Int) -> Void)?
+    public var onCloseItem: ((Int) -> Void)?
+    /// (window id, target space)
     public var onWindowDrop: ((Int, Int) -> Void)?
     public var onSpaceClick: ((Int) -> Void)?
+    /// (source space, target space)
     public var onSpaceDrop: ((Int, Int) -> Void)?
+    /// A drag ended (dropped or not) — re-render now if one was deferred.
+    public var onDragEnded: (() -> Void)?
     public var onKeyEvent: ((NSEvent) -> Bool)?
     public var onResignKey: (() -> Void)?
 
-    private var panel: SpacesKeyPanel?
-    private var thumbnails: [Int: CGImage] = [:]
-    private var spaceRects: [(id: Int, display: Int, rect: CGRect)] = []
-    private var spaceCards: [Int: SpacesCardView] = [:]
-    private var windowSpaces: [Int: Int] = [:]
-    private var windowPIDs: [Int: Int] = [:]
-    private var spaceThumbnails: [Int: [CGImage]] = [:]
-    private var dragPreview: SpacesDragPreviewView?
-    private var lastDragPoint: CGPoint?
-    private var draggingWindowID: Int?
-    private var draggingSpaceID: Int?
-    private var draggingSourceSpaceID: Int?
+    public private(set) var isDragging = false
+    /// Tile frames in body coordinates, by window id (for ↑/↓).
+    public private(set) var tileFrames: [Int: CGRect] = [:]
+
+    private var panel: SwitcherKeyPanel?
+    private weak var body: FlippedView?
+    private var tiles: [Int: SpacesTileView] = [:]
+    private var cardViews: [Int: SpacesCardView] = [:]
+    private var cardRects: [(space: Int, rect: CGRect, isFullscreen: Bool)] = []
+    private var tileSpace: [Int: Int] = [:]
+    private var selectedID: Int?
+    private var ghost: NSView?
+    private var drag: (windowID: Int?, space: Int)?
 
     public init() {}
 
     public var isVisible: Bool { panel?.isVisible ?? false }
-    public private(set) var isDragging = false
 
-    public func show(groups: [SpacesDisplayGroup], metrics: SpacesLayoutMetrics,
-                     thumbnails: [Int: CGImage],
-                     wallpaper: NSImage?,
-                     keyboardFocus: Bool) {
-        self.thumbnails = thumbnails
+    public func show(cards: [SpaceCard], thumbnails: [Int: CGImage], wallpaper: NSImage?,
+                     query: String, selectedID: Int?) {
         let p = panel ?? makePanel()
         panel = p
+        endDrag()
+        tiles = [:]; cardViews = [:]; cardRects = []; tileSpace = [:]; tileFrames = [:]
+        self.selectedID = selectedID
+
         let screen = NSScreen.main ?? NSScreen.screens.first
         let vf = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
-        let maxW = vf.width * 0.86
-        let maxH = vf.height * 0.78
-        let pad: CGFloat = 18
-        let gap: CGFloat = 12
-        let sectionHeader: CGFloat = 24
-        let cardW = CGFloat(min(metrics.spaceWidth, Double(maxW - pad * 2)))
-        let cardH = CGFloat(metrics.spaceHeight)
-        let columns = max(1, min(metrics.columns, groups.map { $0.spaces.count }.max() ?? 1))
-        let naturalWidth = CGFloat(columns) * (cardW + gap) - gap
-        let bodyW = max(cardW, min(CGFloat(maxW - pad * 2), naturalWidth))
-        let bodyH = groups.reduce(CGFloat(0)) { result, group in
-            let rows = CGFloat((group.spaces.count + columns - 1) / columns)
-            return result + sectionHeader + rows * cardH + max(0, rows - 1) * gap + gap
+        let pad: CGFloat = 18, gap: CGFloat = 12, searchH: CGFloat = 40
+        let maxW = vf.width * 0.86 - pad * 2
+        let maxH = vf.height * 0.8 - pad * 2 - searchH
+
+        let groups = Dictionary(grouping: cards, by: \.display).sorted { $0.key < $1.key }
+        let multiDisplay = groups.count > 1
+        let displayH: CGFloat = multiDisplay ? 24 : 0
+        // Card size: as large as fits (300 → 200 pt wide), desktop-shaped.
+        var cardW: CGFloat = 300, cols = 1
+        func bodyHeight(_ w: CGFloat) -> CGFloat {
+            cols = max(1, min(cards.count, Int((maxW + gap) / (w + gap))))
+            let rows = groups.reduce(0) { $0 + ($1.value.count + cols - 1) / cols }
+            return CGFloat(groups.count) * displayH + CGFloat(rows) * (w * 0.62 + gap) - gap
         }
-        let body = SpacesFlippedView(frame: CGRect(x: 0, y: 0,
-                                                    width: bodyW, height: max(bodyH - gap, 1)))
-        spaceRects.removeAll()
-        spaceCards.removeAll()
-        windowSpaces.removeAll()
-        windowPIDs.removeAll()
-        spaceThumbnails.removeAll()
+        while cardW > 200 && bodyHeight(cardW) > maxH { cardW -= 10 }
+        let bodyH = bodyHeight(cardW)
+        let cardH = (cardW * 0.62).rounded()
+        let usedCols = min(cols, groups.map(\.value.count).max() ?? 1)
+        let bodyW = max(CGFloat(usedCols) * (cardW + gap) - gap, 360)
+
+        let body = FlippedView(frame: CGRect(x: 0, y: 0, width: bodyW, height: max(bodyH, 1)))
+        self.body = body
         var y: CGFloat = 0
-
-        for group in groups {
-            let displayLabel = NSTextField(labelWithString: "Display \(group.id)")
-            displayLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-            displayLabel.textColor = .secondaryLabelColor
-            displayLabel.frame = CGRect(x: 0, y: y, width: bodyW, height: sectionHeader)
-            body.addSubview(displayLabel)
-            y += sectionHeader
-
-            for (index, space) in group.spaces.enumerated() {
-                for window in space.windows {
-                    windowSpaces[window.id] = space.id
-                    windowPIDs[window.id] = window.pid
-                }
-                spaceThumbnails[space.id] = space.windows.compactMap { thumbnails[$0.id] }
-                let column = index % columns
-                let row = index / columns
-                let x = CGFloat(column) * (cardW + gap)
-                let frame = CGRect(x: x, y: y + CGFloat(row) * (cardH + gap),
-                                   width: cardW, height: cardH)
-                spaceRects.append((space.id, group.id, frame))
-                let card = SpacesCardView(frame: frame, space: space,
-                                          thumbnails: thumbnails,
-                                          wallpaper: wallpaper,
-                                          onWindowClick: { [weak self] id in self?.onWindowClick?(id) },
-                                          onWindowDrag: { [weak self] id, point in
-                                              self?.windowDragged(id: id, point: point)
-                                          },
-                                          onWindowDragEnd: { [weak self] id, point in
-                                              self?.windowDragEnded(id: id, point: point)
-                                          },
-                                          onSpaceClick: { [weak self] id in self?.onSpaceClick?(id) },
-                                          onSpaceDrag: { [weak self] id, point in
-                                              self?.spaceDragged(id: id, point: point)
-                                          },
-                                          onSpaceDragEnd: { [weak self] id, point in
-                                              self?.spaceDragEnded(id: id, point: point)
-                                          })
-                spaceCards[space.id] = card
-                body.addSubview(card)
+        for (display, group) in groups {
+            if multiDisplay {
+                let label = NSTextField(labelWithString: String(format: L10n.t("ui.menu.displayN"), display))
+                label.font = .systemFont(ofSize: 12, weight: .bold)
+                label.textColor = .secondaryLabelColor
+                label.frame = CGRect(x: 2, y: y + 3, width: bodyW, height: 18)
+                body.addSubview(label)
+                y += displayH
             }
-            let rows = CGFloat((group.spaces.count + columns - 1) / columns)
-            y += rows * cardH + max(0, rows - 1) * gap + gap
+            for (i, card) in group.enumerated() {
+                let frame = CGRect(x: CGFloat(i % cols) * (cardW + gap),
+                                   y: y + CGFloat(i / cols) * (cardH + gap), width: cardW, height: cardH)
+                let view = SpacesCardView(frame: frame, card: card, wallpaper: wallpaper)
+                view.onPress = { [weak self] phase, ev in self?.cardPressed(card, phase, ev) }
+                body.addSubview(view)
+                cardViews[card.space] = view
+                cardRects.append((card.space, frame, card.isFullscreen))
+                for (tile, rect) in zip(card.tiles, view.tileRects) {
+                    let tv = SpacesTileView(frame: rect, tile: tile, thumbnail: thumbnails[tile.item.id])
+                    tv.isSelected = tile.item.id == selectedID
+                    tv.onHover = { [weak self] in self?.onHover?($0) }
+                    tv.onClose = { [weak self] in self?.onCloseItem?($0) }
+                    tv.onPress = { [weak self] phase, ev in self?.tilePressed(tile.item.id, card.space, phase, ev) }
+                    view.addSubview(tv)
+                    tiles[tile.item.id] = tv
+                    tileSpace[tile.item.id] = card.space
+                    tileFrames[tile.item.id] = rect.offsetBy(dx: frame.minX, dy: frame.minY)
+                }
+            }
+            y += CGFloat((group.count + cols - 1) / cols) * (cardH + gap)
         }
 
-        let shell = RoundedPanelView(frame: CGRect(x: 0, y: 0,
-                               width: bodyW + pad * 2,
-                               height: min(bodyH, CGFloat(maxH - pad * 2)) + pad * 2),
-                        radius: 16)
+        // Body, scrolling when taller than the screen allows.
+        let visibleH = min(body.frame.height, maxH)
+        let scrolls = body.frame.height > visibleH
+        let scrollerW = scrolls ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: NSScroller.preferredScrollerStyle) : 0
+        let content = FlippedView(frame: CGRect(x: pad, y: pad, width: bodyW + scrollerW, height: searchH + visibleH))
+        addSwitcherSearchBox(to: content, width: content.frame.width, query: query)
+        if scrolls {
+            let scroll = NSScrollView(frame: CGRect(x: 0, y: searchH, width: bodyW + scrollerW, height: visibleH))
+            scroll.hasVerticalScroller = true
+            scroll.drawsBackground = false
+            scroll.documentView = body
+            content.addSubview(scroll)
+        } else {
+            body.frame.origin.y = searchH
+            content.addSubview(body)
+        }
+
+        let size = CGSize(width: content.frame.width + pad * 2, height: content.frame.height + pad * 2)
+        let shell = RoundedPanelView(frame: CGRect(origin: .zero, size: size), radius: 16)
         let effect = NSVisualEffectView(frame: shell.bounds)
         effect.autoresizingMask = [.width, .height]
-        effect.alphaValue = 1
-        effect.material = NSVisualEffectView.Material.hudWindow
-        effect.blendingMode = NSVisualEffectView.BlendingMode.behindWindow
-        effect.state = NSVisualEffectView.State.active
-        body.frame.origin = CGPoint(x: pad, y: pad)
-        effect.addSubview(body)
+        effect.material = .hudWindow
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        effect.addSubview(content)
         shell.addSubview(effect)
 
-        let frame = CGRect(x: vf.midX - effect.frame.width / 2,
-                           y: vf.midY - effect.frame.height / 2 + vf.height * 0.04,
-                           width: effect.frame.width, height: effect.frame.height)
-        p.setFrame(frame, display: true)
+        p.setFrame(CGRect(x: vf.midX - size.width / 2, y: vf.midY - size.height / 2 + vf.height * 0.04,
+                          width: size.width, height: size.height), display: true)
         p.contentView = shell
-        p.acceptsKeys = keyboardFocus
-        if keyboardFocus { p.makeKeyAndOrderFront(nil) }
-        else { p.orderFrontRegardless() }
+        p.acceptsKeys = true
+        p.makeKeyAndOrderFront(nil)
+        scrollIntoView(selectedID)
     }
 
-    public func hide() { panel?.orderOut(nil) }
-
-    private func windowDragged(id: Int, point: CGPoint) {
-        let converted = panelPoint(point)
-        guard space(at: converted) != nil else { return }
-        beginDrag(windowID: id, spaceID: nil)
-        updateDrag(point: converted, excluding: windowSpaces[id])
+    public func updateSelection(_ id: Int?) {
+        if let old = selectedID { tiles[old]?.isSelected = false }
+        selectedID = id
+        if let id { tiles[id]?.isSelected = true }
+        scrollIntoView(id)
     }
 
-    private func windowDragEnded(id: Int, point: CGPoint) {
-        let converted = panelPoint(point)
-        if let target = space(at: converted), target.id != windowSpaces[id] {
-            onWindowDrop?(id, target.id)
-        }
+    /// Take key status back (our own SA move may have activated another app).
+    public func regainKey() { panel?.makeKeyAndOrderFront(nil) }
+
+    public func hide() {
         endDrag()
+        panel?.orderOut(nil)
     }
 
-    private func spaceDragged(id: Int, point: CGPoint) {
-        let point = panelPoint(point)
-                guard spaceRects.contains(where: { $0.id == id }), space(at: point) != nil else { return }
-        beginDrag(windowID: nil, spaceID: id)
-                updateDrag(point: point, excluding: id)
+    private func scrollIntoView(_ id: Int?) {
+        guard let id, let r = tileFrames[id], let body, body.enclosingScrollView != nil else { return }
+        body.scrollToVisible(r.insetBy(dx: 0, dy: -8))
     }
 
-    private func spaceDragEnded(id: Int, point: CGPoint) {
-        let point = panelPoint(point)
-        if let target = space(at: point) {
-            onSpaceDrop?(id, target.id)
+    // MARK: - Drag & drop
+
+    private func tilePressed(_ id: Int, _ space: Int, _ phase: PressPhase, _ ev: NSEvent) {
+        switch phase {
+        case .click: onClick?(id)
+        case .began:
+            guard let tv = tiles[id] else { return }
+            beginDrag(windowID: id, space: space, snapshotOf: tv, scale: 1)
+        case .moved: moveDrag(ev)
+        case .ended: finishDrag(ev)
         }
-        endDrag()
     }
 
-    private func panelPoint(_ point: CGPoint) -> CGPoint {
-        guard let content = panel?.contentView,
-                            let body = bodyView(in: content) else {
-            return point
+    private func cardPressed(_ card: SpaceCard, _ phase: PressPhase, _ ev: NSEvent) {
+        switch phase {
+        case .click: onSpaceClick?(card.space)
+        case .began:
+            guard !card.isFullscreen, let cv = cardViews[card.space] else { return }
+            beginDrag(windowID: nil, space: card.space, snapshotOf: cv, scale: 0.6)
+        case .moved: moveDrag(ev)
+        case .ended: finishDrag(ev)
         }
-        let contentPoint = content.convert(point, from: nil)
-        let bodyPoint = CGPoint(x: contentPoint.x - body.frame.minX,
-                                y: body.frame.maxY - contentPoint.y)
-        return bodyPoint
     }
 
-    private func beginDrag(windowID: Int?, spaceID: Int?) {
-        if draggingWindowID == windowID && draggingSpaceID == spaceID { return }
-        endDrag()
+    private func beginDrag(windowID: Int?, space: Int, snapshotOf view: NSView, scale: CGFloat) {
+        guard let root = panel?.contentView,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        let img = NSImage(size: view.bounds.size)
+        img.addRepresentation(rep)
+        let g = NSImageView(frame: CGRect(x: 0, y: 0, width: view.bounds.width * scale,
+                                          height: view.bounds.height * scale))
+        g.image = img
+        g.imageScaling = .scaleProportionallyUpOrDown
+        g.alphaValue = 0.8
+        root.addSubview(g)
+        ghost = g
+        drag = (windowID, space)
         isDragging = true
-        draggingWindowID = windowID
-        draggingSpaceID = spaceID
-        draggingSourceSpaceID = spaceID ?? windowID.flatMap { windowSpaces[$0] }
-        if let id = windowID { draggingWindowID = id }
-        if let id = spaceID { spaceCards[id]?.alphaValue = 0.55 }
-        if let id = draggingSourceSpaceID { spaceCards[id]?.isDragSource = true }
-        let preview = SpacesDragPreviewView(
-            title: windowID == nil ? "Moving space" : "Moving window",
-            thumbnails: windowID.map { id in thumbnails[id].map { [$0] } ?? [] }
-                ?? spaceID.flatMap { spaceThumbnails[$0] } ?? [],
-            appIcon: windowID.flatMap { windowPIDs[$0] }
-                .flatMap { NSRunningApplication(processIdentifier: pid_t($0))?.icon })
-        preview.frame.origin = .zero
-        preview.autoresizingMask = []
-        panel?.contentView?.addSubview(preview)
-        dragPreview = preview
+        (windowID.flatMap { tiles[$0] } ?? cardViews[space])?.alphaValue = 0.4
     }
 
-    private func updateDrag(point: CGPoint, excluding sourceSpace: Int?) {
-        lastDragPoint = point
-        let targetID = space(at: point)?.id
-        if let content = panel?.contentView,
-              let body = bodyView(in: content) {
-            let contentPoint = CGPoint(x: point.x + body.frame.minX,
-                                       y: body.frame.maxY - point.y)
-            dragPreview?.setFrameOrigin(CGPoint(
-                x: contentPoint.x - (dragPreview?.frame.width ?? 0) / 2,
-                y: contentPoint.y - (dragPreview?.frame.height ?? 0) / 2))
-        }
-        for (id, card) in spaceCards {
-            card.isDropTarget = targetID != nil && targetID != sourceSpace && id == targetID
-        }
+    private func moveDrag(_ ev: NSEvent) {
+        guard let drag, let root = panel?.contentView else { return }
+        let p = root.convert(ev.locationInWindow, from: nil)
+        if let g = ghost { g.frame.origin = CGPoint(x: p.x - g.frame.width / 2, y: p.y - g.frame.height / 2) }
+        let target = dropTarget(ev)
+        for (space, cv) in cardViews { cv.isDropTarget = space == target && space != drag.space }
     }
 
-    private func bodyView(in view: NSView) -> SpacesFlippedView? {
-        if let body = view as? SpacesFlippedView { return body }
-        for subview in view.subviews {
-            if let body = bodyView(in: subview) { return body }
+    private func finishDrag(_ ev: NSEvent) {
+        guard let drag else { return }
+        let target = dropTarget(ev)
+        endDrag()
+        if let target, target != drag.space {
+            if let id = drag.windowID { onWindowDrop?(id, target) } else { onSpaceDrop?(drag.space, target) }
         }
-        return nil
+        onDragEnded?()
+    }
+
+    private func dropTarget(_ ev: NSEvent) -> Int? {
+        guard let body else { return nil }
+        return SpacesInteraction.dropTarget(at: body.convert(ev.locationInWindow, from: nil),
+                                            cards: cardRects, visible: body.visibleRect)
     }
 
     private func endDrag() {
-        if let id = draggingSpaceID { spaceCards[id]?.alphaValue = 1 }
-        if let id = draggingSourceSpaceID { spaceCards[id]?.isDragSource = false }
-        for card in spaceCards.values { card.isDropTarget = false }
-        dragPreview?.removeFromSuperview()
-        dragPreview = nil
-        lastDragPoint = nil
-        draggingWindowID = nil
-        draggingSpaceID = nil
-        draggingSourceSpaceID = nil
+        ghost?.removeFromSuperview()
+        ghost = nil
+        if let drag { (drag.windowID.flatMap { tiles[$0] } ?? cardViews[drag.space])?.alphaValue = 1 }
+        drag = nil
         isDragging = false
+        for cv in cardViews.values { cv.isDropTarget = false }
     }
 
-    private func space(at point: CGPoint) -> (id: Int, display: Int, rect: CGRect)? {
-        spaceRects.first { $0.rect.contains(point) }
-    }
-
-    private func makePanel() -> SpacesKeyPanel {
-        let p = SpacesKeyPanel(contentRect: .zero,
-                               styleMask: [.borderless, .nonactivatingPanel],
-                               backing: .buffered, defer: false)
+    private func makePanel() -> SwitcherKeyPanel {
+        let p = SwitcherKeyPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+                                 backing: .buffered, defer: false)
         p.level = .popUpMenu
         p.backgroundColor = .clear
         p.isOpaque = false
@@ -245,281 +243,194 @@ public final class SpacesPanel {
         p.hidesOnDeactivate = false
         p.isReleasedWhenClosed = false
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        p.handleKey = { [weak self] event in self?.onKeyEvent?(event) ?? false }
+        p.handleKey = { [weak self] ev in self?.onKeyEvent?(ev) ?? false }
         p.didResignKey = { [weak self] in self?.onResignKey?() }
         return p
     }
 }
 
-private final class SpacesKeyPanel: NSPanel {
-    var acceptsKeys = false
-    var handleKey: ((NSEvent) -> Bool)?
-    var didResignKey: (() -> Void)?
+enum PressPhase { case click, began, moved, ended }
 
-    override var canBecomeKey: Bool { acceptsKeys }
-    override var canBecomeMain: Bool { false }
+/// Press → click or drag (past 4 pt), reported through `onPress`.
+private class PressTrackingView: NSView {
+    var onPress: ((PressPhase, NSEvent) -> Void)?
+    var pressEnabled = true
+    private var start: NSPoint?
+    private var dragging = false
 
-    override func keyDown(with event: NSEvent) {
-        if handleKey?(event) == true { return }
-        super.keyDown(with: event)
-    }
-
-    override func resignKey() {
-        super.resignKey()
-        if isVisible { didResignKey?() }
-    }
-}
-
-private final class SpacesFlippedView: NSView {
     override var isFlipped: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        guard pressEnabled else { return }
+        start = event.locationInWindow
+        dragging = false
+    }
+    override func mouseDragged(with event: NSEvent) {
+        guard let start else { return }
+        let p = event.locationInWindow
+        if !dragging {
+            guard abs(p.x - start.x) + abs(p.y - start.y) > 4 else { return }
+            dragging = true
+            onPress?(.began, event)
+        }
+        onPress?(.moved, event)
+    }
+    override func mouseUp(with event: NSEvent) {
+        guard start != nil else { return }
+        start = nil
+        if dragging { dragging = false; onPress?(.ended, event) } else { onPress?(.click, event) }
+    }
 }
 
-private final class SpacesCardView: NSView {
-    private let space: SpacesItem
-    private let thumbnails: [Int: CGImage]
-    private let wallpaper: NSImage?
-    private let onWindowClick: (Int) -> Void
-    private let onWindowDrag: (Int, CGPoint) -> Void
-    private let onWindowDragEnd: (Int, CGPoint) -> Void
-    private let onSpaceClick: (Int) -> Void
-    private let onSpaceDrag: (Int, CGPoint) -> Void
-    private let onSpaceDragEnd: (Int, CGPoint) -> Void
-    private var draggingSpace = false
-    private var dragStart: CGPoint?
+/// One space: title, Current / Visible tag, optional wallpaper, tiled windows.
+private final class SpacesCardView: PressTrackingView {
+    let tileRects: [CGRect]
+    private let card: SpaceCard
 
-    var isDragSource = false {
-        didSet { updateBorder() }
-    }
+    var isDropTarget = false { didSet { updateBorder() } }
 
-    var isDropTarget = false {
-        didSet { updateBorder() }
-    }
-
-    private func updateBorder() {
-        if isDropTarget {
-            layer?.borderColor = NSColor.controlAccentColor.cgColor
-            layer?.borderWidth = 3
-        } else if isDragSource {
-            layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
-            layer?.borderWidth = 1
-        } else {
-            layer?.borderColor = (space.isVisible ? NSColor.controlAccentColor : NSColor.white.withAlphaComponent(0.12)).cgColor
-            layer?.borderWidth = space.isVisible ? 2 : 1
-        }
-    }
-
-            init(frame: CGRect, space: SpacesItem,
-                thumbnails: [Int: CGImage], wallpaper: NSImage?,
-         onWindowClick: @escaping (Int) -> Void,
-         onWindowDrag: @escaping (Int, CGPoint) -> Void,
-         onWindowDragEnd: @escaping (Int, CGPoint) -> Void,
-         onSpaceClick: @escaping (Int) -> Void,
-         onSpaceDrag: @escaping (Int, CGPoint) -> Void,
-         onSpaceDragEnd: @escaping (Int, CGPoint) -> Void) {
-        self.space = space
-        self.thumbnails = thumbnails
-        self.wallpaper = wallpaper
-        self.onWindowClick = onWindowClick
-        self.onWindowDrag = onWindowDrag
-        self.onWindowDragEnd = onWindowDragEnd
-        self.onSpaceClick = onSpaceClick
-        self.onSpaceDrag = onSpaceDrag
-        self.onSpaceDragEnd = onSpaceDragEnd
+    init(frame: CGRect, card: SpaceCard, wallpaper: NSImage?) {
+        self.card = card
+        let header: CGFloat = 26, inset: CGFloat = 7
+        let area = CGRect(x: inset, y: header, width: frame.width - inset * 2, height: frame.height - header - inset)
+        tileRects = SpacesLayout.windowTiles(aspects: card.tiles.map(\.aspect), width: Double(area.width),
+                                             height: Double(area.height))
+            .map { $0.offsetBy(dx: area.minX, dy: area.minY) }
         super.init(frame: frame)
         wantsLayer = true
         layer?.cornerRadius = 10
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(space.isVisible ? 0.14 : 0.07).cgColor
-        layer?.borderWidth = space.isVisible ? 2 : 1
-        layer?.borderColor = (space.isVisible ? NSColor.controlAccentColor : NSColor.white.withAlphaComponent(0.12)).cgColor
-
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(card.hasFocus ? 0.14 : 0.07).cgColor
         if let wallpaper {
-            let background = WallpaperBackgroundView(frame: bounds, image: wallpaper, radius: 10)
-            background.autoresizingMask = [.width, .height]
-            addSubview(background)
+            let bg = WallpaperBackgroundView(frame: bounds, image: wallpaper, radius: 10)
+            bg.autoresizingMask = [.width, .height]
+            addSubview(bg)
         }
+        alphaValue = card.isFullscreen ? 0.6 : 1
 
-        let title = NSTextField(labelWithString: space.label ?? "Desktop \(space.id)")
+        var tagW: CGFloat = 0
+        if card.hasFocus || card.isVisible {
+            let tag = NSTextField(labelWithString: L10n.t(card.hasFocus ? "ui.switcher.currentSpace"
+                                                                        : "ui.switcher.visibleSpace"))
+            tag.font = .systemFont(ofSize: 10, weight: .bold)
+            tag.textColor = card.hasFocus ? .white : .labelColor
+            tag.alignment = .center
+            tag.wantsLayer = true
+            tag.layer?.cornerRadius = 4
+            tag.layer?.backgroundColor = (card.hasFocus ? NSColor.systemGreen
+                                          : NSColor.white.withAlphaComponent(0.18)).cgColor
+            tag.sizeToFit()
+            tagW = tag.frame.width + 10
+            tag.frame = CGRect(x: frame.width - tagW - 8, y: 6, width: tagW, height: tag.frame.height)
+            addSubview(tag)
+        }
+        let title = NSTextField(labelWithString: card.name)
         title.font = .systemFont(ofSize: 12, weight: .semibold)
         title.textColor = .labelColor
-        title.frame = CGRect(x: 10, y: 8, width: frame.width - 20, height: 18)
+        title.lineBreakMode = .byTruncatingTail
+        title.frame = CGRect(x: 10, y: 5, width: frame.width - 20 - tagW, height: 17)
         addSubview(title)
-
-        let body = CGRect(x: 8, y: 34, width: frame.width - 16, height: frame.height - 42)
-        let tiles = SpacesLayout.windowTiles(
-            aspects: space.windows.map(\.aspectRatio),
-            width: Double(body.width), height: Double(body.height))
-        for (index, window) in space.windows.enumerated() {
-            let tile = CGRect(x: body.minX + tiles[index].minX,
-                              y: body.minY + tiles[index].minY,
-                              width: tiles[index].width, height: tiles[index].height)
-            let cell = SpacesWindowCell(frame: tile,
-                                        item: window,
-                                        thumbnail: thumbnails[window.id],
-                                        onClick: onWindowClick,
-                                        onDrag: { [weak self] id, point in
-                                            guard let self else { return }
-                                            self.onWindowDrag(id, point)
-                                        },
-                                        onDragEnd: { [weak self] id, point in
-                                            guard let self else { return }
-                                            self.onWindowDragEnd(id, point)
-                                        })
-            addSubview(cell)
-        }
+        updateBorder()
     }
 
     required init?(coder: NSCoder) { fatalError() }
-    override var isFlipped: Bool { true }
 
-    override func mouseDown(with event: NSEvent) {
-        draggingSpace = false
-        dragStart = event.locationInWindow
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard let dragStart,
-              hypot(event.locationInWindow.x - dragStart.x,
-                    event.locationInWindow.y - dragStart.y) > 4 else { return }
-        draggingSpace = true
-        onSpaceDrag(space.id, event.locationInWindow)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        if draggingSpace { onSpaceDragEnd(space.id, event.locationInWindow) }
-        else { onSpaceClick(space.id) }
-        draggingSpace = false
-        dragStart = nil
+    private func updateBorder() {
+        if isDropTarget {
+            layer?.borderColor = NSColor.controlAccentColor.cgColor
+            layer?.borderWidth = 3
+        } else if card.hasFocus {
+            layer?.borderColor = NSColor.systemGreen.cgColor
+            layer?.borderWidth = 2
+        } else {
+            layer?.borderColor = NSColor.white.withAlphaComponent(card.isVisible ? 0.35 : 0.12).cgColor
+            layer?.borderWidth = 1
+        }
     }
 }
 
-private final class SpacesWindowCell: NSView {
-    private let item: SpacesWindowItem
-    private let thumbnail: CGImage?
-    private let onClick: (Int) -> Void
-    private let onDrag: (Int, CGPoint) -> Void
-    private let onDragEnd: (Int, CGPoint) -> Void
-    private var didDrag = false
+/// One window: thumbnail (or app icon), a capsule with the app icon and the
+/// project keyword, ✕ when selected. Non-matching tiles are dimmed and inert.
+private final class SpacesTileView: PressTrackingView {
+    var onHover: ((Int) -> Void)?
+    var onClose: ((Int) -> Void)?
+    var isSelected = false { didSet { refreshSelection() } }
 
-    init(frame: CGRect, item: SpacesWindowItem, thumbnail: CGImage?,
-         onClick: @escaping (Int) -> Void,
-         onDrag: @escaping (Int, CGPoint) -> Void,
-         onDragEnd: @escaping (Int, CGPoint) -> Void) {
-        self.item = item
-        self.thumbnail = thumbnail
-        self.onClick = onClick
-        self.onDrag = onDrag
-        self.onDragEnd = onDragEnd
+    private let id: Int
+    private let matches: Bool
+    private let closeButton = NSButton()
+
+    init(frame: CGRect, tile: SpaceTile, thumbnail: CGImage?) {
+        id = tile.item.id
+        matches = tile.matches
         super.init(frame: frame)
+        pressEnabled = matches
         wantsLayer = true
         layer?.cornerRadius = 6
+        layer?.borderColor = NSColor.controlAccentColor.cgColor
+        alphaValue = matches ? 1 : 0.25
+        toolTip = tile.item.title.isEmpty ? tile.item.app : "\(tile.item.app) — \(tile.item.title)"
 
-        let icon = NSImageView(frame: bounds.insetBy(dx: 1, dy: 1))
-        icon.image = thumbnail.map { NSImage(cgImage: $0, size: .zero) }
-            ?? NSRunningApplication(processIdentifier: pid_t(item.pid))?.icon
+        let appIcon = NSRunningApplication(processIdentifier: pid_t(tile.item.pid))?.icon
             ?? NSWorkspace.shared.icon(for: .applicationBundle)
-        icon.imageScaling = .scaleProportionallyUpOrDown
-        addSubview(icon)
+        let image = NSImageView(frame: bounds.insetBy(dx: 2, dy: 2))
+        image.image = thumbnail.map { NSImage(cgImage: $0, size: .zero) } ?? appIcon
+        image.imageScaling = .scaleProportionallyUpOrDown
+        addSubview(image)
 
-        let appIconSize = min(26, max(18, min(bounds.width, bounds.height) * 0.24))
-        let appIcon = SpacesAppIconView(frame: CGRect(
-            x: (bounds.width - appIconSize) / 2,
-            y: bounds.height - appIconSize - 1,
-            width: appIconSize, height: appIconSize))
-        appIcon.image = NSRunningApplication(processIdentifier: pid_t(item.pid))?.icon
-            ?? NSWorkspace.shared.icon(for: .applicationBundle)
-        appIcon.imageScaling = .scaleProportionallyUpOrDown
-        appIcon.wantsLayer = true
-        appIcon.layer?.cornerRadius = 4
-        appIcon.layer?.shadowColor = NSColor.black.cgColor
-        appIcon.layer?.shadowOpacity = 0.55
-        appIcon.layer?.shadowRadius = 3
-        appIcon.layer?.shadowOffset = .zero
-        addSubview(appIcon)
+        // Capsule: app icon + project keyword, bottom-center.
+        let iconSide: CGFloat = 14, pillH: CGFloat = 20
+        let label = NSTextField(labelWithString: tile.item.keyword.isEmpty ? tile.item.app : tile.item.keyword)
+        label.font = .systemFont(ofSize: 10, weight: .semibold)
+        label.textColor = .white
+        label.lineBreakMode = .byTruncatingTail
+        label.sizeToFit()
+        let pillW = min(label.frame.width + iconSide + 16, frame.width - 6)
+        let pill = NSView(frame: CGRect(x: (frame.width - pillW) / 2, y: frame.height - pillH - 3,
+                                        width: max(pillW, iconSide + 10), height: pillH))
+        pill.wantsLayer = true
+        pill.layer?.cornerRadius = pillH / 2
+        pill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
+        let icon = NSImageView(frame: CGRect(x: 5, y: (pillH - iconSide) / 2, width: iconSide, height: iconSide))
+        icon.image = appIcon
+        pill.addSubview(icon)
+        label.frame = CGRect(x: iconSide + 8, y: (pillH - label.frame.height) / 2,
+                             width: max(pill.frame.width - iconSide - 13, 0), height: label.frame.height)
+        pill.addSubview(label)
+        addSubview(pill)
+
+        closeButton.bezelStyle = .circular
+        closeButton.isBordered = false
+        closeButton.title = ""
+        closeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: nil)
+        closeButton.contentTintColor = .secondaryLabelColor
+        closeButton.target = self
+        closeButton.action = #selector(closeTapped)
+        closeButton.frame = NSRect(x: 4, y: 4, width: 18, height: 18)
+        closeButton.isHidden = true
+        addSubview(closeButton)
+
+        if matches {
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                           owner: self, userInfo: nil))
+        }
+        refreshSelection()
     }
 
     required init?(coder: NSCoder) { fatalError() }
-    override var isFlipped: Bool { true }
 
-    override func mouseDown(with event: NSEvent) { didDrag = false }
+    override func mouseEntered(with event: NSEvent) { onHover?(id) }
 
-    override func mouseDragged(with event: NSEvent) {
-        didDrag = true
-        onDrag(item.id, event.locationInWindow)
+    /// Clicks on a dimmed tile fall through to its card (no window action).
+    override func hitTest(_ point: NSPoint) -> NSView? { pressEnabled ? super.hitTest(point) : nil }
+
+    private func refreshSelection() {
+        layer?.backgroundColor = isSelected ? NSColor.white.withAlphaComponent(0.2).cgColor : nil
+        layer?.borderWidth = isSelected ? 2.5 : 0
+        closeButton.isHidden = !isSelected
     }
 
-    override func mouseUp(with event: NSEvent) {
-        if didDrag { onDragEnd(item.id, event.locationInWindow) }
-        else { onClick(item.id) }
-    }
+    @objc private func closeTapped() { onClose?(id) }
 }
 
-private final class SpacesDragPreviewView: NSView {
-    init(title: String, thumbnails: [CGImage], appIcon: NSImage?) {
-        let hasThumbnails = !thumbnails.isEmpty
-        let iconOnly = !hasThumbnails && appIcon != nil
-        super.init(frame: CGRect(x: 0, y: 0,
-                                 width: hasThumbnails ? 180 : (iconOnly ? 56 : 150),
-                                 height: hasThumbnails ? 120 : (iconOnly ? 56 : 32)))
-        wantsLayer = true
-        layer?.cornerRadius = 7
-        layer?.backgroundColor = !hasThumbnails && !iconOnly
-            ? NSColor.black.withAlphaComponent(0.78).cgColor
-            : NSColor.clear.cgColor
-        if hasThumbnails {
-            let gap: CGFloat = 3
-            let columns = min(2, thumbnails.count)
-            let rows = Int(ceil(Double(thumbnails.count) / Double(columns)))
-            let tileWidth = (bounds.width - 10 - CGFloat(columns - 1) * gap) / CGFloat(columns)
-            let tileHeight = (bounds.height - 10 - CGFloat(rows - 1) * gap) / CGFloat(rows)
-            for (index, thumbnail) in thumbnails.enumerated() {
-                let column = index % columns
-                let row = index / columns
-                let image = NSImageView(frame: CGRect(
-                    x: 5 + CGFloat(column) * (tileWidth + gap),
-                    y: 5 + CGFloat(row) * (tileHeight + gap),
-                    width: tileWidth, height: tileHeight))
-                image.image = NSImage(cgImage: thumbnail, size: .zero)
-                image.imageScaling = .scaleProportionallyUpOrDown
-                addSubview(image)
-            }
-        } else if !iconOnly {
-            let label = NSTextField(labelWithString: title)
-            label.font = .systemFont(ofSize: 11, weight: .semibold)
-            label.textColor = .white
-            label.alignment = .center
-            label.frame = bounds.insetBy(dx: 8, dy: 7)
-            addSubview(label)
-        }
-
-        if let appIcon {
-            let size = min(28, max(20, min(bounds.width, bounds.height) * 0.22))
-            let icon = SpacesAppIconView(frame: CGRect(x: (bounds.width - size) / 2,
-                                                       y: 2,
-                                                       width: size, height: size))
-            icon.image = appIcon
-            icon.imageScaling = .scaleProportionallyUpOrDown
-            icon.wantsLayer = true
-            icon.layer?.shadowColor = NSColor.black.cgColor
-            icon.layer?.shadowOpacity = 0.6
-            icon.layer?.shadowRadius = 3
-            icon.layer?.shadowOffset = .zero
-            addSubview(icon)
-        }
-
-        let entrance = CABasicAnimation(keyPath: "transform.scale")
-        entrance.fromValue = 0.92
-        entrance.toValue = 1.0
-        entrance.duration = 0.16
-        entrance.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        layer?.add(entrance, forKey: "spaces-drag-entrance")
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-}
-
-private final class SpacesAppIconView: NSImageView {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-}
