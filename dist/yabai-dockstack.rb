@@ -20,9 +20,8 @@ cask "yabai-dockstack" do
 
   # The app is ad-hoc signed but not Apple-notarized, so Gatekeeper would block it.
   # Strip the quarantine attribute on install so it opens without the prompt.
-  postflight do
-    system_command "/usr/bin/xattr",
-                   args: ["-dr", "com.apple.quarantine", "#{appdir}/yabai-dockstack.app"]
+  postflight_steps do
+    run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/yabai-dockstack.app"]
   end
 
   # yabai is required but lives in a third-party tap, which `depends_on` can't
