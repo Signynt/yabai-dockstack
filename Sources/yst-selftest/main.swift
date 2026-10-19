@@ -1128,6 +1128,46 @@ do {
           "card click: SA focuses the space, else its recent window, else nothing")
 }
 
+print("Spaces switcher: no-follow move, space swap")
+do {
+    func logged(_ queryWindows: String) -> (String, String) {
+        let dir = NSTemporaryDirectory() + "fy-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let log = dir + "/log", path = dir + "/yabai"
+        let script = """
+        #!/bin/sh
+        echo "$*" >> \(log)
+        case "$*" in
+          *query*--windows*) echo '\(queryWindows)' ;;
+          *query*--spaces*) echo '[{"index":2,"display":1},{"index":3,"display":1}]' ;;
+        esac
+        """
+        try? script.write(toFile: path, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        return (path, log)
+    }
+    func w(_ id: Int, _ space: Int) -> String {
+        #"{"id":\#(id),"pid":1,"app":"A","frame":{"x":0,"y":0,"w":1,"h":1},"display":1,"space":\#(space),"stack-index":0,"has-focus":false}"#
+    }
+    func calls(_ log: String) -> String { (try? String(contentsOfFile: log, encoding: .utf8)) ?? "" }
+    let (p1, l1) = logged("[\(w(7, 2))]")
+    let c1 = YabaiClient(yabaiPath: p1)
+    WindowSpaceMover(client: c1, spaceMover: SpaceMover(client: c1), saAvailable: { true })
+        .moveNow(windowId: 7, toSpace: 3, follow: false)
+    check(calls(l1).contains("-m window 7 --space 3") && !calls(l1).contains("--focus"),
+          "SA move without follow: by id, no focus")
+    let both = "[\(w(21, 2)),\(w(22, 2)),\(w(31, 3))]"
+    let (p2, l2) = logged(both)
+    let c2 = YabaiClient(yabaiPath: p2)
+    WindowSpaceMover(client: c2, spaceMover: SpaceMover(client: c2), saAvailable: { true }).swapNow(2, 3)
+    check(["window 21 --space 3", "window 22 --space 3", "window 31 --space 2"].allSatisfy { calls(l2).contains($0) },
+          "space swap moves both sides' windows (SA)")
+    let (p3, l3) = logged(both)
+    let c3 = YabaiClient(yabaiPath: p3)
+    WindowSpaceMover(client: c3, spaceMover: SpaceMover(client: c3), saAvailable: { false }).swapNow(2, 3)
+    check(calls(l3).range(of: #"--space \d"#, options: .regularExpression) == nil, "space swap does nothing without the SA")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

@@ -185,8 +185,7 @@ public final class SpacesController {
         guard let window = windows.first(where: { $0.id == id }), window.space != space else { return }
         mutationQueue.async { [weak self] in
             guard let self else { return }
-            self.client.moveWindow(id: id, toSpace: space,
-                                   focusDestination: self.focusDestination)
+            self.client.moveToSpace(windowId: id, space: space, focus: self.focusDestination)
             self.refreshAsync()
         }
     }
@@ -200,12 +199,10 @@ public final class SpacesController {
         mutationQueue.async { [weak self] in
             guard let self else { return }
             for window in sourceWindows {
-                self.client.moveWindow(id: window.id, toSpace: target,
-                                       focusDestination: false)
+                self.client.moveToSpace(windowId: window.id, space: target)
             }
             for window in targetWindows {
-                self.client.moveWindow(id: window.id, toSpace: source,
-                                       focusDestination: false)
+                self.client.moveToSpace(windowId: window.id, space: source)
             }
             self.refreshAsync()
         }

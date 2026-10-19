@@ -63,6 +63,57 @@ final class DragToSpaceTests: XCTestCase {
         XCTAssertFalse(calls.contains("--space"), calls)  // never sends the focused window away
     }
 
+    func testScriptingAdditionNoFollowMoveDoesNotFocus() throws {
+        let (path, log) = try loggingYabai(focusExit: 0)
+        let client = YabaiClient(yabaiPath: path)
+        WindowSpaceMover(client: client, spaceMover: SpaceMover(client: client), saAvailable: { true })
+            .moveNow(windowId: 7, toSpace: 3, follow: false)
+        let calls = try String(contentsOfFile: log, encoding: .utf8)
+        XCTAssertTrue(calls.contains("-m window 7 --space 3"), calls)
+        XCTAssertFalse(calls.contains("--focus"), calls)
+    }
+
+    /// Fake yabai with windows 21, 22 on space 2 and 31 on space 3.
+    private func swapYabai() throws -> (path: String, log: String) {
+        let dir = NSTemporaryDirectory() + "fy-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let log = dir + "/log", path = dir + "/yabai"
+        func w(_ id: Int, _ space: Int) -> String {
+            #"{"id":\#(id),"pid":1,"app":"A","frame":{"x":0,"y":0,"w":1,"h":1},"display":1,"space":\#(space),"stack-index":0,"has-focus":false}"#
+        }
+        let script = """
+        #!/bin/sh
+        echo "$*" >> \(log)
+        case "$*" in
+          *query*--windows*) echo '[\(w(21, 2)),\(w(22, 2)),\(w(31, 3))]' ;;
+          *query*--spaces*) echo '[{"index":2,"display":1},{"index":3,"display":1}]' ;;
+        esac
+        """
+        try script.write(toFile: path, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        return (path, log)
+    }
+
+    func testSpaceSwapMovesBothSidesWithScriptingAddition() throws {
+        let (path, log) = try swapYabai()
+        let client = YabaiClient(yabaiPath: path)
+        WindowSpaceMover(client: client, spaceMover: SpaceMover(client: client), saAvailable: { true })
+            .swapNow(2, 3)
+        let calls = try String(contentsOfFile: log, encoding: .utf8)
+        for expected in ["window 21 --space 3", "window 22 --space 3", "window 31 --space 2"] {
+            XCTAssertTrue(calls.contains(expected), calls)
+        }
+    }
+
+    func testSpaceSwapIsInertWithoutScriptingAddition() throws {
+        let (path, log) = try swapYabai()
+        let client = YabaiClient(yabaiPath: path)
+        WindowSpaceMover(client: client, spaceMover: SpaceMover(client: client), saAvailable: { false })
+            .swapNow(2, 3)
+        let calls = (try? String(contentsOfFile: log, encoding: .utf8)) ?? ""
+        XCTAssertNil(calls.range(of: #"--space \d"#, options: .regularExpression), calls)
+    }
+
     func testUnfocusableWindowIsNotWalked() throws {
         let path = NSTemporaryDirectory() + "fake-yabai-\(UUID().uuidString)"
         try "#!/bin/sh\ncase \"$*\" in *--focus*) exit 1 ;; esac\n".write(toFile: path, atomically: true, encoding: .utf8)

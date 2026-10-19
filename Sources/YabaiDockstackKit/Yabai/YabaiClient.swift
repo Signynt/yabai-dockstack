@@ -45,21 +45,17 @@ public final class YabaiClient {
     }
 
     /// Send a window to a space (needs the scripting addition on modern macOS).
-    public func moveToSpace(windowId: Int, space: Int) {
-        _ = run(["-m", "window", String(windowId), "--space", String(space)])
+    /// Needs the scripting addition. `focus` also follows the window there.
+    public func moveToSpace(windowId: Int, space: Int, focus: Bool = false) {
+        var args = ["-m", "window", String(windowId), "--space", String(space)]
+        if focus { args.append("--focus") }
+        _ = run(args)
     }
 
     public func focus(spaceId: Int) {
         _ = run(["-m", "space", "--focus", String(spaceId)])
     }
 
-    /// Move a window to a space. Adding --focus is opt-in because the Spaces
-    /// View normally preserves the user's current space and focused window.
-    public func moveWindow(id: Int, toSpace space: Int, focusDestination: Bool = false) {
-        var args = ["-m", "window", String(id), "--space", String(space)]
-        if focusDestination { args.append("--focus") }
-        _ = run(args)
-    }
 
     /// Close a window (AX-based; works without the scripting addition).
     public func close(windowId: Int) {
