@@ -968,6 +968,29 @@ do {
           "unfocusable (tray-closed) window → focusFailed, no simulated walk")
 }
 
+print("Drag to space: switcher sections")
+do {
+    func item(_ id: Int, space: Int, display: Int = 1) -> SwitcherItem {
+        SwitcherItem(id: id, pid: id, app: "A", title: "t\(id)", space: space, display: display, hasFocus: false)
+    }
+    let spaces = [SpaceInfo(index: 1, display: 1, isVisible: true), SpaceInfo(index: 2, display: 1, isVisible: false),
+                  SpaceInfo(index: 3, display: 2, isVisible: true)]
+    let s = SwitcherSections.build(items: [item(9, space: 3, display: 2), item(5, space: 1), item(4, space: 1)],
+                                   spaces: spaces, labels: [3: "web"])
+    check(s.map(\.space) == [1, 2, 3], "every space is a section, incl. empty, display order")
+    check(s.map(\.name) == ["D1 · Space 1", "D1 · Space 2", "D2 · web"], "section names (display prefix when >1)")
+    check(s.first?.items.map(\.id) == [5, 4], "MRU order kept inside a section")
+    let l = SwitcherSections.layout(counts: [3, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
+                                    gap: 10, headerHeight: 20, emptyHeight: 30)
+    check(l.headers.map(\.minY) == [0, 140, 200] && l.size == CGSize(width: 210, height: 270), "section layout")
+    check(l.cells.count == 4 && l.cells[3] == CGRect(x: 0, y: 220, width: 100, height: 50), "cells placed per section")
+    check(SwitcherSections.verticalNeighbor(of: 2, up: true, cells: l.cells) == 0, "↑ to nearest cell above")
+    check(SwitcherSections.verticalNeighbor(of: 2, up: false, cells: l.cells) == 3, "↓ crosses an empty section")
+    check(SwitcherSections.verticalNeighbor(of: 3, up: false, cells: l.cells) == nil, "↓ at bottom stays")
+    check(SwitcherSections.section(at: CGPoint(x: 50, y: 160), layout: l) == 1, "drop on an empty section")
+    check(SwitcherSections.section(at: CGPoint(x: 50, y: 400), layout: l) == nil, "drop outside sections → nil")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }
