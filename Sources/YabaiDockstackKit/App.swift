@@ -161,6 +161,20 @@ public enum YabaiDockstack {
                 coordinator.requestRefresh()
             }
         }
+        // Hyper Key: always applied at launch — with "none" this also removes a
+        // mapping left behind by a crash, so the source key is never stuck as F18.
+        let hyperKey = HyperKeyController()
+        func applyHyperKey() {
+            Hotkey.showHyperSymbol = config.hyperShowSymbol
+            hyperKey.apply(source: HyperSource(rawValue: config.hyperKey) ?? .none,
+                           quickPress: HyperQuickPress(rawValue: config.hyperQuickPress) ?? .none,
+                           includeShift: config.hyperIncludeShift)
+        }
+        applyHyperKey()
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
+            hyperKey.shutdown()
+        }
         let spaceMover = SpaceMover(client: client)
         let menu = MenuBarController()
         let listener = SignalListener(
@@ -230,6 +244,7 @@ public enum YabaiDockstack {
                 ensureSwitcherTap()
                 menu.openOnHover = config.menuOpenOnHover
                 strip.setEnabled(config.windowStrip)
+                applyHyperKey()
             },
             onLoginToggle: { enabled in _ = LoginItem.setEnabled(enabled) },
             loginIsEnabled: { LoginItem.isEnabled })
@@ -253,7 +268,7 @@ public enum YabaiDockstack {
         }
 
         yabaiGuide.onSetPath = { settings.show() }
-        menu.onQuit = { listener.stop(); coordinator.stop(); app.terminate(nil) }
+        menu.onQuit = { listener.stop(); coordinator.stop(); hyperKey.shutdown(); app.terminate(nil) }
         menu.onOpenSettings = { settings.show() }
         menu.onOpenYabaiSetup = { yabaiGuide.show() }
         menu.onReregisterSignals = {
@@ -299,6 +314,11 @@ public enum YabaiDockstack {
             // Activate Dock previews once Accessibility is granted (no relaunch).
             ensureDockController()
             ensureSwitcherTap()
+            // Activate the Hyper Key once Accessibility is granted (no relaunch).
+            if config.hyperKey != HyperSource.none.rawValue, !hyperKey.isRunning,
+               PermissionsHelper.hasAccessibility() {
+                applyHyperKey()
+            }
             guard client.isAvailable() else { return }
             if !SignalInstaller.isInstalled(client: client) {
                 installSignals()

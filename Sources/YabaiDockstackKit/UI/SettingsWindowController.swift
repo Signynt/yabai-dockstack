@@ -42,6 +42,14 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let menuHoverHelp = NSTextField(labelWithString: "")
     private let windowStripCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let windowStripHelp = NSTextField(wrappingLabelWithString: "")
+
+    private let hyperSourcePopup = NSPopUpButton()
+    private let hyperQuickPopup = NSPopUpButton()
+    private let hyperShiftCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let hyperSymbolCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let hyperStatus = NSTextField(wrappingLabelWithString: "")
+    /// Quick-press choices offered for the current source (toggleCapsLock only for Caps Lock).
+    private var hyperQuickChoices: [HyperQuickPress] = []
     private let loginCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     // Switcher tab
     private static let switcherAppearanceOrder = ["thumbnails", "icons", "titles"]
@@ -118,6 +126,39 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         srStatus.textColor = sr ? .systemGreen : .systemRed
         srButton.isEnabled = !sr
         permissionBanner.isHidden = (ax && sr) || !config.dockPreview
+        syncHyperStatus(ax: ax)
+    }
+
+    private func syncHyperStatus(ax: Bool) {
+        var notes: [String] = []
+        if HyperSource(rawValue: config.hyperKey) != HyperSource.none {
+            if !ax { notes.append(L10n.t("ui.hyper.needsAccessibility")) }
+            if Self.processRunning("karabiner_grabber") {
+                notes.append(L10n.t("ui.hyper.karabinerWarning"))
+            }
+        }
+        hyperStatus.stringValue = notes.joined(separator: "\n")
+        hyperStatus.isHidden = notes.isEmpty
+    }
+
+    /// karabiner_grabber is a root daemon, not an NSRunningApplication — ask pgrep.
+    private static func processRunning(_ name: String) -> Bool {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        p.arguments = ["-x", name]
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { return false }
+        p.waitUntilExit()
+        return p.terminationStatus == 0
+    }
+
+    private func syncHyperQuickChoices(source: HyperSource) {
+        hyperQuickChoices = source == .capsLock ? HyperQuickPress.allCases : [.none, .escape]
+        hyperQuickPopup.removeAllItems()
+        hyperQuickPopup.addItems(withTitles: hyperQuickChoices.map { L10n.t("ui.hyper.quick.\($0.rawValue)") })
+        let current = HyperQuickPress(rawValue: config.hyperQuickPress) ?? .none
+        hyperQuickPopup.selectItem(at: hyperQuickChoices.firstIndex(of: current) ?? 0)
     }
 
     // MARK: - Build
@@ -159,6 +200,12 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         windowStripHelp.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         windowStripHelp.textColor = .secondaryLabelColor
         windowStripHelp.preferredMaxLayoutWidth = 340
+        hyperSourcePopup.target = self; hyperSourcePopup.action = #selector(changed)
+        hyperQuickPopup.target = self; hyperQuickPopup.action = #selector(changed)
+        hyperShiftCheck.target = self; hyperShiftCheck.action = #selector(changed)
+        hyperSymbolCheck.target = self; hyperSymbolCheck.action = #selector(changed)
+        hyperStatus.font = .systemFont(ofSize: 11)
+        hyperStatus.textColor = .systemOrange
         loginCheck.target = self; loginCheck.action = #selector(loginChanged)
 
         fullWidthPopup.target = self; fullWidthPopup.action = #selector(changed)
@@ -378,12 +425,51 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         switcherItem.label = L10n.t("ui.tab.switcher")
         switcherItem.view = switcherPane
 
+        // --- Hyper Key tab ---
+        hyperSourcePopup.removeAllItems()
+        hyperSourcePopup.addItems(withTitles: HyperSource.allCases.map { L10n.t("ui.hyper.source.\($0.rawValue)") })
+        hyperShiftCheck.title = L10n.t("ui.hyper.includeShift")
+        hyperSymbolCheck.title = L10n.t("ui.hyper.showSymbol")
+        let hyperGrid = NSGridView(views: [
+            row(L10n.t("ui.hyper.key"), hyperSourcePopup),
+            row(L10n.t("ui.hyper.quickPress"), hyperQuickPopup),
+            [NSGridCell.emptyContentView, hyperShiftCheck],
+            [NSGridCell.emptyContentView, hyperSymbolCheck],
+        ])
+        hyperGrid.translatesAutoresizingMaskIntoConstraints = false
+        hyperGrid.column(at: 0).xPlacement = NSGridCell.Placement.trailing
+        hyperGrid.rowAlignment = NSGridRow.Alignment.firstBaseline
+        hyperGrid.columnSpacing = 12
+        hyperGrid.rowSpacing = 12
+        let hyperHelp = NSTextField(wrappingLabelWithString: L10n.t("ui.hyper.help"))
+        hyperHelp.font = .systemFont(ofSize: 11)
+        hyperHelp.textColor = .secondaryLabelColor
+        let hyperStack = NSStackView(views: [hyperGrid, hyperHelp, hyperStatus])
+        hyperStack.orientation = .vertical
+        hyperStack.alignment = .leading
+        hyperStack.spacing = 14
+        hyperStack.translatesAutoresizingMaskIntoConstraints = false
+        let hyperPane = NSView()
+        hyperPane.addSubview(hyperStack)
+        NSLayoutConstraint.activate([
+            hyperStack.leadingAnchor.constraint(equalTo: hyperPane.leadingAnchor, constant: 20),
+            hyperStack.trailingAnchor.constraint(equalTo: hyperPane.trailingAnchor, constant: -20),
+            hyperStack.topAnchor.constraint(equalTo: hyperPane.topAnchor, constant: 20),
+            hyperStack.bottomAnchor.constraint(lessThanOrEqualTo: hyperPane.bottomAnchor, constant: -20),
+            hyperHelp.widthAnchor.constraint(equalTo: hyperStack.widthAnchor),
+            hyperStatus.widthAnchor.constraint(equalTo: hyperStack.widthAnchor),
+        ])
+        let hyperItem = NSTabViewItem()
+        hyperItem.label = L10n.t("ui.tab.hyper")
+        hyperItem.view = hyperPane
+
         // --- NSTabView as the window's content view ---
         let tabView = NSTabView()
         tabView.addTabViewItem(appearanceItem)
         tabView.addTabViewItem(yabaiItem)
         tabView.addTabViewItem(keyboardItem)
         tabView.addTabViewItem(switcherItem)
+        tabView.addTabViewItem(hyperItem)
         self.tabView = tabView
 
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
@@ -419,6 +505,14 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         dragReorderCheck.isEnabled = !config.indicatorClickThrough
         dockPreviewCheck.state = config.dockPreview ? .on : .off
         menuHoverCheck.state = config.menuOpenOnHover ? .on : .off
+        let hyperSource = HyperSource(rawValue: config.hyperKey) ?? .none
+        hyperSourcePopup.selectItem(at: HyperSource.allCases.firstIndex(of: hyperSource) ?? 0)
+        syncHyperQuickChoices(source: hyperSource)
+        hyperShiftCheck.state = config.hyperIncludeShift ? .on : .off
+        hyperSymbolCheck.state = config.hyperShowSymbol ? .on : .off
+        let hyperOff = hyperSource == .none
+        hyperQuickPopup.isEnabled = !hyperOff
+        hyperShiftCheck.isEnabled = !hyperOff
         windowStripCheck.state = config.windowStrip ? .on : .off
         fullWidthPopup.selectItem(at: config.fullWidthSide == "right" ? 1 : 0)
         debounceField.integerValue = Int((config.debounceSeconds * 1000).rounded())
@@ -454,6 +548,18 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         dragReorderCheck.isEnabled = !config.indicatorClickThrough
         config.dockPreview = dockPreviewCheck.state == .on
         config.menuOpenOnHover = menuHoverCheck.state == .on
+        let hyperSource = HyperSource.allCases[max(hyperSourcePopup.indexOfSelectedItem, 0)]
+        config.hyperKey = hyperSource.rawValue
+        let quickIdx = hyperQuickPopup.indexOfSelectedItem
+        var quick = hyperQuickChoices.indices.contains(quickIdx) ? hyperQuickChoices[quickIdx] : .none
+        if quick == .toggleCapsLock && hyperSource != .capsLock { quick = .none }
+        config.hyperQuickPress = quick.rawValue
+        config.hyperIncludeShift = hyperShiftCheck.state == .on
+        config.hyperShowSymbol = hyperSymbolCheck.state == .on
+        syncHyperQuickChoices(source: hyperSource)
+        hyperQuickPopup.isEnabled = hyperSource != .none
+        hyperShiftCheck.isEnabled = hyperSource != .none
+        syncHyperStatus(ax: permissionStatus?().0 ?? false)
         config.windowStrip = windowStripCheck.state == .on
         config.fullWidthSide = fullWidthPopup.indexOfSelectedItem == 1 ? "right" : "left"
         // ms -> seconds, with sane floors
