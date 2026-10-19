@@ -43,4 +43,16 @@ final class YabaiWindowDecodeTests: XCTestCase {
         XCTAssertEqual(wins.first { $0.id == 10 }?.isSticky, true)
         XCTAssertEqual(wins.first { $0.id == 11 }?.isSticky, false)
     }
+
+    func testScratchpadDecodesAndDefaultsToNil() {
+        let json = """
+        [
+          {"id":10,"pid":200,"app":"Spotify","title":"music","scratchpad":"Spotify","frame":{"x":0.0,"y":0.0,"w":100.0,"h":100.0},"display":1,"space":1,"stack-index":0,"has-focus":false},
+          {"id":11,"pid":201,"app":"Finder","title":"files","frame":{"x":0.0,"y":0.0,"w":100.0,"h":100.0},"display":1,"space":1,"stack-index":0,"has-focus":false}
+        ]
+        """.data(using: .utf8)!
+        let wins = YabaiWindow.decodeList(json)
+        XCTAssertEqual(wins.first { $0.id == 10 }?.scratchpad, "Spotify")
+        XCTAssertNil(wins.first { $0.id == 11 }?.scratchpad)
+    }
 }

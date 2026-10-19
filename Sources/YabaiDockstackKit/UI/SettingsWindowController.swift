@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// A simple preferences window so all appearance settings are adjustable from the
 /// UI — no config-file editing. Changes apply live and persist via `onChange`.
@@ -64,6 +65,14 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let switcherAllRecorder = RecordHotkeyControl(frame: .zero)
     private let switcherAppRecorder = RecordHotkeyControl(frame: .zero)
     private let switcherSpaceRecorder = RecordHotkeyControl(frame: .zero)
+    private let spacesFocusDestinationCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let spacesWallpaperCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let spacesWallpaperPathField = NSTextField()
+    private let spacesWallpaperChooseButton = NSButton(title: "", target: nil, action: nil)
+    private let spacesWallpaperClearButton = NSButton(title: "", target: nil, action: nil)
+    private let spacesWallpaperDarkPathField = NSTextField()
+    private let spacesWallpaperDarkChooseButton = NSButton(title: "", target: nil, action: nil)
+    private let spacesWallpaperDarkClearButton = NSButton(title: "", target: nil, action: nil)
     // Permissions (for Dock previews)
     private let axStatus = NSTextField(labelWithString: "")
     private let axButton = NSButton(title: "", target: nil, action: nil)
@@ -221,6 +230,12 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         switcherAppearancePopup.target = self; switcherAppearancePopup.action = #selector(changed)
         switcherHoldCheck.target = self; switcherHoldCheck.action = #selector(changed)
         switcherCmdTabCheck.target = self; switcherCmdTabCheck.action = #selector(changed)
+        spacesFocusDestinationCheck.target = self; spacesFocusDestinationCheck.action = #selector(changed)
+        spacesWallpaperCheck.target = self; spacesWallpaperCheck.action = #selector(changed)
+        spacesWallpaperChooseButton.target = self; spacesWallpaperChooseButton.action = #selector(chooseWallpaper)
+        spacesWallpaperClearButton.target = self; spacesWallpaperClearButton.action = #selector(clearWallpaper)
+        spacesWallpaperDarkChooseButton.target = self; spacesWallpaperDarkChooseButton.action = #selector(chooseDarkWallpaper)
+        spacesWallpaperDarkClearButton.target = self; spacesWallpaperDarkClearButton.action = #selector(clearDarkWallpaper)
         func wireRecorder(_ r: RecordHotkeyControl, _ kp: WritableKeyPath<AppConfig, String>) {
             r.onChange = { [weak self] hk in
                 guard let self else { return }
@@ -414,6 +429,28 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         switcherEnableCheck.title = L10n.t("ui.switcher.enable")
         switcherHoldCheck.title = L10n.t("ui.switcher.holdToCycle")
         switcherCmdTabCheck.title = L10n.t("ui.switcher.captureCmdTab")
+        spacesFocusDestinationCheck.title = L10n.t("ui.spaces.focusDestination")
+        spacesWallpaperCheck.title = L10n.t("ui.spaces.wallpaper")
+        spacesWallpaperChooseButton.title = L10n.t("ui.spaces.chooseWallpaper")
+        spacesWallpaperClearButton.title = L10n.t("ui.spaces.clearWallpaper")
+        spacesWallpaperPathField.placeholderString = L10n.t("ui.spaces.wallpaperPath")
+        spacesWallpaperPathField.isEditable = false
+        spacesWallpaperPathField.lineBreakMode = .byTruncatingMiddle
+        spacesWallpaperDarkChooseButton.title = L10n.t("ui.spaces.chooseWallpaper")
+        spacesWallpaperDarkClearButton.title = L10n.t("ui.spaces.clearWallpaper")
+        spacesWallpaperDarkPathField.placeholderString = L10n.t("ui.spaces.darkWallpaperPath")
+        spacesWallpaperDarkPathField.isEditable = false
+        spacesWallpaperDarkPathField.lineBreakMode = .byTruncatingMiddle
+        let wallpaperControls = NSStackView(views: [spacesWallpaperPathField,
+                                  spacesWallpaperChooseButton,
+                                  spacesWallpaperClearButton])
+        wallpaperControls.spacing = 6
+        wallpaperControls.alignment = .centerY
+        let darkWallpaperControls = NSStackView(views: [spacesWallpaperDarkPathField,
+                                 spacesWallpaperDarkChooseButton,
+                                 spacesWallpaperDarkClearButton])
+        darkWallpaperControls.spacing = 6
+        darkWallpaperControls.alignment = .centerY
 
         let switcherGrid = NSGridView(views: [
             [NSGridCell.emptyContentView, switcherEnableCheck],
@@ -424,6 +461,10 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             row(L10n.t("ui.switcher.hotkeySpace"), switcherSpaceRecorder),
             row(L10n.t("ui.switcher.hotkeySearch"), switcherSearchRecorder),
             [NSGridCell.emptyContentView, switcherCmdTabCheck],
+            [NSGridCell.emptyContentView, spacesFocusDestinationCheck],
+            [NSGridCell.emptyContentView, spacesWallpaperCheck],
+            row(L10n.t("ui.spaces.wallpaperPath"), wallpaperControls),
+            row(L10n.t("ui.spaces.darkWallpaperPath"), darkWallpaperControls),
         ])
         switcherGrid.translatesAutoresizingMaskIntoConstraints = false
         switcherGrid.column(at: 0).xPlacement = NSGridCell.Placement.trailing
@@ -566,6 +607,10 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         switcherCmdTabCheck.state = config.switcherCaptureCmdTab ? .on : .off
         // ⌘⇥ capture rides on the hold-to-cycle tap; make the dependency visible.
         switcherCmdTabCheck.isEnabled = config.switcherEnabled && config.switcherHoldToCycle
+        spacesFocusDestinationCheck.state = config.spacesViewFocusDestination ? .on : .off
+        spacesWallpaperCheck.state = config.spacesViewWallpaper ? .on : .off
+        spacesWallpaperPathField.stringValue = config.spacesViewWallpaperPath
+        spacesWallpaperDarkPathField.stringValue = config.spacesViewWallpaperDarkPath
         switcherAllRecorder.hotkey = Hotkey.parse(config.switcherHotkeyAll)
         switcherAppRecorder.hotkey = Hotkey.parse(config.switcherHotkeyApp)
         switcherSpaceRecorder.hotkey = Hotkey.parse(config.switcherHotkeySpace)
@@ -615,6 +660,10 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             (0..<Self.switcherAppearanceOrder.count).contains(sIdx) ? sIdx : 0]
         config.switcherHoldToCycle = switcherHoldCheck.state == .on
         config.switcherCaptureCmdTab = switcherCmdTabCheck.state == .on
+        config.spacesViewFocusDestination = spacesFocusDestinationCheck.state == .on
+        config.spacesViewWallpaper = spacesWallpaperCheck.state == .on
+        config.spacesViewWallpaperPath = spacesWallpaperPathField.stringValue
+        config.spacesViewWallpaperDarkPath = spacesWallpaperDarkPathField.stringValue
         switcherCmdTabCheck.isEnabled = config.switcherEnabled && config.switcherHoldToCycle
         onChange(config)
         if symbolChanged {
@@ -649,6 +698,38 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     @objc private func grantAX() { onGrantAccessibility?() }
     @objc private func grantSR() { onGrantScreenRecording?() }
+
+    @objc private func chooseWallpaper() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.image]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        spacesWallpaperPathField.stringValue = url.path
+        changed()
+    }
+
+    @objc private func clearWallpaper() {
+        spacesWallpaperPathField.stringValue = ""
+        changed()
+    }
+
+    @objc private func chooseDarkWallpaper() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.image]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        spacesWallpaperDarkPathField.stringValue = url.path
+        changed()
+    }
+
+    @objc private func clearDarkWallpaper() {
+        spacesWallpaperDarkPathField.stringValue = ""
+        changed()
+    }
 }
 
 extension SettingsWindowController: NSTabViewDelegate {

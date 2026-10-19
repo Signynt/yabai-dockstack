@@ -49,6 +49,18 @@ public final class YabaiClient {
         _ = run(["-m", "window", String(windowId), "--space", String(space)])
     }
 
+    public func focus(spaceId: Int) {
+        _ = run(["-m", "space", "--focus", String(spaceId)])
+    }
+
+    /// Move a window to a space. Adding --focus is opt-in because the Spaces
+    /// View normally preserves the user's current space and focused window.
+    public func moveWindow(id: Int, toSpace space: Int, focusDestination: Bool = false) {
+        var args = ["-m", "window", String(id), "--space", String(space)]
+        if focusDestination { args.append("--focus") }
+        _ = run(args)
+    }
+
     /// Close a window (AX-based; works without the scripting addition).
     public func close(windowId: Int) {
         _ = run(["-m", "window", String(windowId), "--close"])
@@ -90,6 +102,17 @@ public final class YabaiClient {
     public func queryDisplaysInfo() -> [DisplayInfo] {
         guard let data = run(["-m", "query", "--displays"]) else { return [] }
         return DisplayInfo.decodeList(data)
+    }
+
+    /// Move a space to the adjacent position on its current display.
+    public func moveSpace(id: Int, forward: Bool) {
+        _ = run(["-m", "space", String(id), "--move", forward ? "next" : "prev"])
+    }
+
+    /// Move a space to another display. yabai places it at the destination
+    /// display's trailing edge; callers can then apply adjacent moves.
+    public func moveSpace(id: Int, toDisplay display: Int) {
+        _ = run(["-m", "space", String(id), "--display", String(display)])
     }
 
     /// The currently focused window, or nil if none / yabai unavailable.

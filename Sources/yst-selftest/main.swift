@@ -1065,6 +1065,21 @@ do {
     check(WindowStripModel.dropSpace(x: 150, y: 10, height: 20, sections: ranges) == 2, "strip: drop on the strip lands")
 }
 
+print("Spaces view (PR #4) model")
+do {
+    func w(_ id: Int, space: Int, scratchpad: String? = nil) -> YabaiWindow {
+        YabaiWindow(id: id, pid: id, app: "A", title: "t", frame: YRect(x: 0, y: 0, w: 200, h: 100),
+                    display: 1, space: space, stackIndex: 0, hasFocus: false, scratchpad: scratchpad)
+    }
+    let tiles = SpacesLayout.windowTiles(aspects: [2.0, 2.2, 0.5], width: 400, height: 220)
+    let inBounds = tiles.allSatisfy { $0.width > 0 && $0.height > 0 && $0.maxX <= 400 && $0.maxY <= 220 }
+    let disjoint = tiles.indices.allSatisfy { i in tiles.indices.allSatisfy { j in i == j || !tiles[i].insetBy(dx: 0.5, dy: 0.5).intersects(tiles[j]) } }
+    check(tiles.count == 3 && inBounds && disjoint, "window tiles: 3 positive, in-bounds, non-overlapping rects")
+    check(SpacesModel.windowIDsToMove(from: 1, to: 1, windows: [w(1, space: 1)]) == [], "space transfer onto itself moves nothing")
+    check(SpacesModel.displayableWindows([w(1, space: 1), w(2, space: 1, scratchpad: "x")]).map(\.id) == [1],
+          "scratchpad windows are not displayable")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

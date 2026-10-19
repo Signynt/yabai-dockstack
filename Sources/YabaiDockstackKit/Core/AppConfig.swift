@@ -64,6 +64,14 @@ public struct AppConfig: Codable, Equatable {
     public var switcherHotkeyAll: String
     public var switcherHotkeyApp: String
     public var switcherHotkeySpace: String
+    /// Focus the destination space after a Spaces View window drop.
+    public var spacesViewFocusDestination: Bool
+    /// Show the current macOS desktop wallpaper behind Spaces View.
+    public var spacesViewWallpaper: Bool
+    /// User-selected wallpaper file used by Spaces View.
+    public var spacesViewWallpaperPath: String
+    /// User-selected dark appearance wallpaper file used by Spaces View.
+    public var spacesViewWallpaperDarkPath: String
 
     public static let defaults = AppConfig(
         yabaiPath: "/opt/homebrew/bin/yabai",
@@ -94,7 +102,11 @@ public struct AppConfig: Codable, Equatable {
         switcherCaptureCmdTab: false,
         switcherHotkeyAll: "alt - tab",
         switcherHotkeyApp: "alt - 0x32",
-        switcherHotkeySpace: "")
+        switcherHotkeySpace: "",
+        spacesViewFocusDestination: false,
+        spacesViewWallpaper: false,
+        spacesViewWallpaperPath: "",
+        spacesViewWallpaperDarkPath: "")
 
     public static func load(from data: Data?) -> AppConfig {
         guard let data,
