@@ -123,6 +123,7 @@ public enum YabaiDockstack {
         }
         let strip = WindowStripController(client: client, focuser: focuser)
         strip.setEnabled(config.windowStrip)
+        strip.setScale(config.windowStripScale)
         coordinator.onWindows = { windows in
             switcher.noteWindows(windows)
             strip.update(windows: windows)
@@ -253,6 +254,7 @@ public enum YabaiDockstack {
                 ensureSwitcherTap()
                 menu.openOnHover = config.menuOpenOnHover
                 strip.setEnabled(config.windowStrip)
+                strip.setScale(config.windowStripScale)
                 applyHyperKey()
             },
             onLoginToggle: { enabled in _ = LoginItem.setEnabled(enabled) },

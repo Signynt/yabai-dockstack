@@ -40,6 +40,8 @@ public struct AppConfig: Codable, Equatable {
     public var menuOpenOnHover: Bool
     /// Per-display window strip under the menu bar.
     public var windowStrip: Bool
+    /// Window strip size multiplier (1 = 24 pt tall).
+    public var windowStripScale: Double
     /// Hyper Key source: a `HyperSource` raw value ("none" = off).
     public var hyperKey: String
     /// Tap-alone action: a `HyperQuickPress` raw value.
@@ -80,6 +82,7 @@ public struct AppConfig: Codable, Equatable {
         dockPreview: true,
         menuOpenOnHover: false,
         windowStrip: false,
+        windowStripScale: 0.8,
         hyperKey: "none",
         hyperQuickPress: "none",
         hyperIncludeShift: true,

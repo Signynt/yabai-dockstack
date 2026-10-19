@@ -34,13 +34,17 @@ public enum WindowStripModel {
     public struct Rendered: Equatable {
         public let strip: DisplayStrip
         public let frame: CGRect
-        public init(strip: DisplayStrip, frame: CGRect) { self.strip = strip; self.frame = frame }
+        public let scale: Double
+        public init(strip: DisplayStrip, frame: CGRect, scale: Double = 1) {
+            self.strip = strip; self.frame = frame; self.scale = scale
+        }
     }
 
-    /// Redraw when the content or the screen's frame (resolution, arrangement,
-    /// menu bar) changed.
-    public static func needsRender(cached: Rendered?, strip: DisplayStrip, frame: CGRect) -> Bool {
-        cached != Rendered(strip: strip, frame: frame)
+    /// Redraw when the content, the screen's frame (resolution, arrangement,
+    /// menu bar) or the strip size changed.
+    public static func needsRender(cached: Rendered?, strip: DisplayStrip, frame: CGRect,
+                                   scale: Double = 1) -> Bool {
+        cached != Rendered(strip: strip, frame: frame, scale: scale)
     }
 
     /// Displays ascending; per display only spaces that have windows, ascending;
@@ -67,20 +71,24 @@ public enum WindowStripModel {
     }
 
     public enum Density: Equatable {
+        /// Icon + full keyword.
         case full
+        /// Icon + shortened keyword.
         case compact
-        /// Compact chips for the first `visible` windows, then a "+N" chip.
+        /// Icons only.
+        case iconOnly
+        /// Icons for the first `visible` windows, then a "+N" chip.
         case overflow(visible: Int)
     }
 
-    /// Picks how to draw chips in `available` points: full (icon + keyword),
-    /// compact (icon + space badge), or compact with a trailing "+N" chip.
-    public static func fit(fullWidths: [Double], compactWidth: Double,
+    /// Picks the richest chip style that fits `available` points.
+    public static func fit(fullWidths: [Double], compactWidths: [Double], iconWidth: Double,
                            overflowWidth: Double, available: Double) -> Density {
         if fullWidths.reduce(0, +) <= available { return .full }
-        if Double(fullWidths.count) * compactWidth <= available { return .compact }
+        if compactWidths.reduce(0, +) <= available { return .compact }
+        if Double(fullWidths.count) * iconWidth <= available { return .iconOnly }
         let room = available - overflowWidth
-        let n = compactWidth > 0 && room > 0 ? Int(room / compactWidth) : 0
+        let n = iconWidth > 0 && room > 0 ? Int(room / iconWidth) : 0
         return .overflow(visible: min(n, fullWidths.count))
     }
 }

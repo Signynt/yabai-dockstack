@@ -1,8 +1,8 @@
 import AppKit
 
 /// One floating strip per display, directly under the menu bar (right-aligned):
-/// every window on that display as icon + keyword + space chips, grouped by
-/// space. Click a chip to jump to it; hover for the full title.
+/// every window on that display as icon + keyword chips, spaces separated by a
+/// divider. Click a chip to jump to it; hover for the full title and space.
 public final class WindowStripController {
     private let client: YabaiClient
     private let focuser: WindowFocuser
@@ -11,8 +11,11 @@ public final class WindowStripController {
     private var rendered: [Int: WindowStripModel.Rendered] = [:]
     /// The "+N" chip was clicked (wired to opening the window menu).
     public var onOverflowClick: (() -> Void)?
+    /// Size multiplier (Settings → window strip size); 1 = 24 pt tall.
+    private var scale: CGFloat = 0.8
+    private var last: (strips: [WindowStripModel.DisplayStrip], displays: [DisplayInfo])?
 
-    static let height: CGFloat = 24
+    static let baseHeight: CGFloat = 24
 
     public init(client: YabaiClient, focuser: WindowFocuser) {
         self.client = client
@@ -35,6 +38,14 @@ public final class WindowStripController {
         DispatchQueue.main.async { [weak self] in self?.render(strips, displays: displays) }
     }
 
+    /// Main thread. Redraws right away with the last data.
+    public func setScale(_ s: Double) {
+        let new = CGFloat(min(max(s, 0.5), 1.5))
+        guard new != scale else { return }
+        scale = new
+        if let last { render(last.strips, displays: last.displays) }
+    }
+
     private func removeAll() {
         panels.values.forEach { $0.orderOut(nil) }
         panels.removeAll()
@@ -43,6 +54,7 @@ public final class WindowStripController {
 
     private func render(_ strips: [WindowStripModel.DisplayStrip], displays: [DisplayInfo]) {
         guard enabled else { return }
+        last = (strips, displays)
         let screens = ScreenProvider.screens()
         var live = Set<Int>()
         for strip in strips where !strip.hidden {
@@ -51,13 +63,15 @@ public final class WindowStripController {
                   let ns = NSScreen.screens.first(where: { $0.frame == screen.cocoaFrame }) else { continue }
             live.insert(strip.display)
             if panels[strip.display] != nil,
-               !WindowStripModel.needsRender(cached: rendered[strip.display], strip: strip, frame: ns.visibleFrame) {
+               !WindowStripModel.needsRender(cached: rendered[strip.display], strip: strip,
+                                             frame: ns.visibleFrame, scale: Double(scale)) {
                 continue
             }
-            rendered[strip.display] = WindowStripModel.Rendered(strip: strip, frame: ns.visibleFrame)
+            rendered[strip.display] = WindowStripModel.Rendered(strip: strip, frame: ns.visibleFrame,
+                                                                scale: Double(scale))
             let panel = panels[strip.display] ?? makePanel()
             panels[strip.display] = panel
-            let content = StripView(strip: strip, maxWidth: ns.visibleFrame.width / 2,
+            let content = StripView(strip: strip, scale: scale, maxWidth: ns.visibleFrame.width / 2,
                                     onClick: { [weak self] id in
                                         DispatchQueue.global(qos: .userInitiated).async {
                                             self?.focuser.focus(windowId: id)
@@ -65,9 +79,9 @@ public final class WindowStripController {
                                     },
                                     onOverflow: { [weak self] in self?.onOverflowClick?() })
             let vf = ns.visibleFrame
-            panel.setFrame(NSRect(x: vf.maxX - content.frame.width - 8,
-                                  y: vf.maxY - Self.height - 2,
-                                  width: content.frame.width, height: Self.height), display: false)
+            let h = content.frame.height
+            panel.setFrame(NSRect(x: vf.maxX - content.frame.width - 8, y: vf.maxY - h - 2,
+                                  width: content.frame.width, height: h), display: false)
             panel.contentView = content
             panel.orderFrontRegardless()
         }
@@ -91,135 +105,125 @@ public final class WindowStripController {
     }
 }
 
-/// The strip's content: sections of chips separated by thin dividers.
+/// The strip's content: chips separated by a thin divider between spaces.
 private final class StripView: NSView {
-    private static let pad: CGFloat = 4
-    private static let dividerW: CGFloat = 9
-    private static let overflowW: CGFloat = 30
-
-    init(strip: WindowStripModel.DisplayStrip, maxWidth: CGFloat,
+    init(strip: WindowStripModel.DisplayStrip, scale k: CGFloat, maxWidth: CGFloat,
          onClick: @escaping (Int) -> Void, onOverflow: @escaping () -> Void) {
         super.init(frame: .zero)
+        let h = WindowStripController.baseHeight * k
+        let pad = 4 * k, dividerW = 9 * k, overflowW = 30 * k
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.withAlphaComponent(0.6).cgColor
-        layer?.cornerRadius = 7
+        layer?.cornerRadius = 7 * k
 
         let chips = strip.sections.flatMap(\.chips)
-        let dividers = CGFloat(max(strip.sections.count - 1, 0)) * Self.dividerW
-        let available = Double(maxWidth - dividers - Self.pad * 2)
+        let dividers = CGFloat(max(strip.sections.count - 1, 0)) * dividerW
+        let available = Double(maxWidth - dividers - pad * 2)
         let density = WindowStripModel.fit(
-            fullWidths: chips.map { Double(StripChip.width(for: $0, compact: false, sections: strip.sections)) },
-            compactWidth: Double(StripChip.compactWidth(sections: strip.sections)),
-            overflowWidth: Double(Self.overflowW), available: available)
-        let compact = density != .full
-        var budget: Int = {
-            if case let .overflow(n) = density { return n }
-            return chips.count
-        }()
+            fullWidths: chips.map { Double(StripChip.width(for: $0, style: .full, scale: k)) },
+            compactWidths: chips.map { Double(StripChip.width(for: $0, style: .compact, scale: k)) },
+            iconWidth: Double(StripChip.width(for: nil, style: .iconOnly, scale: k)),
+            overflowWidth: Double(overflowW), available: available)
+        let style: StripChip.Style
+        var budget = chips.count
+        switch density {
+        case .full: style = .full
+        case .compact: style = .compact
+        case .iconOnly: style = .iconOnly
+        case let .overflow(n): style = .iconOnly; budget = n
+        }
 
-        var x = Self.pad
-        let h = WindowStripController.height
+        var x = pad
         for (si, section) in strip.sections.enumerated() where budget > 0 {
             if si > 0 {
-                let div = NSView(frame: NSRect(x: x + Self.dividerW / 2, y: 5, width: 1, height: h - 10))
+                let div = NSView(frame: NSRect(x: x + dividerW / 2, y: h * 0.22, width: 1, height: h * 0.56))
                 div.wantsLayer = true
-                div.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.25).cgColor
+                div.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.3).cgColor
                 addSubview(div)
-                x += Self.dividerW
+                x += dividerW
             }
             let sectionStart = x
             for chip in section.chips where budget > 0 {
-                let v = StripChip(chip: chip, section: section, compact: compact,
-                                  sections: strip.sections, onClick: onClick)
-                v.frame.origin = CGPoint(x: x, y: 2)
+                let v = StripChip(chip: chip, section: section, style: style, scale: k, onClick: onClick)
+                v.frame.origin = CGPoint(x: x, y: 2 * k)
                 addSubview(v)
                 x += v.frame.width
                 budget -= 1
             }
             if section.isVisible {
-                let bg = NSView(frame: NSRect(x: sectionStart - 2, y: 2, width: x - sectionStart + 4, height: h - 4))
+                let bg = NSView(frame: NSRect(x: sectionStart - 2 * k, y: 2 * k,
+                                              width: x - sectionStart + 4 * k, height: h - 4 * k))
                 bg.wantsLayer = true
                 bg.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.1).cgColor
-                bg.layer?.cornerRadius = 5
+                bg.layer?.cornerRadius = 5 * k
                 addSubview(bg, positioned: .below, relativeTo: nil)
             }
         }
         if case let .overflow(n) = density {
-            let more = OverflowChip(count: chips.count - n, onClick: onOverflow)
-            more.frame = NSRect(x: x, y: 2, width: Self.overflowW, height: h - 4)
+            let more = OverflowChip(count: chips.count - n, scale: k, onClick: onOverflow)
+            more.frame = NSRect(x: x, y: 2 * k, width: overflowW, height: h - 4 * k)
             addSubview(more)
-            x += Self.overflowW
+            x += overflowW
         }
-        frame = NSRect(x: 0, y: 0, width: x + Self.pad, height: h)
+        frame = NSRect(x: 0, y: 0, width: x + pad, height: h)
     }
     required init?(coder: NSCoder) { fatalError() }
 }
 
 private final class StripChip: NSView {
-    private static let font = NSFont.systemFont(ofSize: 11)
-    private static let badgeFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
-    private static let icon: CGFloat = 16
+    enum Style { case full, compact, iconOnly }
+    private static let fullMax: CGFloat = 140
+    private static let compactMax: CGFloat = 56
     private let chip: WindowStripModel.Chip
     private let section: WindowStripModel.SpaceSection
     private let onClick: (Int) -> Void
     private var tooltip: NSPanel?
 
-    static func badgeWidth(_ name: String) -> CGFloat {
-        ceil((name as NSString).size(withAttributes: [.font: badgeFont]).width) + 8
-    }
-    static func compactWidth(sections: [WindowStripModel.SpaceSection]) -> CGFloat {
-        let widest = sections.map { badgeWidth($0.name) }.max() ?? 0
-        return 6 + icon + 3 + widest + 6
-    }
-    static func width(for chip: WindowStripModel.Chip, compact: Bool,
-                      sections: [WindowStripModel.SpaceSection]) -> CGFloat {
-        let name = sections.first { $0.space == chip.space }?.name ?? "\(chip.space)"
-        let label = compact ? 0 : min(ceil((chip.keyword as NSString).size(withAttributes: [.font: font]).width), 140) + 4
-        return 6 + icon + 3 + label + badgeWidth(name) + 6
+    private static func font(_ k: CGFloat) -> NSFont { .systemFont(ofSize: 11 * k) }
+
+    static func width(for chip: WindowStripModel.Chip?, style: Style, scale k: CGFloat) -> CGFloat {
+        let base = 5 * k + 16 * k + 5 * k
+        guard style != .iconOnly, let chip else { return base }
+        let cap = (style == .full ? fullMax : compactMax) * k
+        return base + min(labelWidth(chip.keyword, k), cap) + 2 * k
     }
 
-    init(chip: WindowStripModel.Chip, section: WindowStripModel.SpaceSection, compact: Bool,
-         sections: [WindowStripModel.SpaceSection], onClick: @escaping (Int) -> Void) {
+    /// Measured the way the label renders (NSString sizing misses the field's inset).
+    private static func labelWidth(_ text: String, _ k: CGFloat) -> CGFloat {
+        let f = NSTextField(labelWithString: text)
+        f.font = font(k)
+        return ceil(f.fittingSize.width)
+    }
+
+    init(chip: WindowStripModel.Chip, section: WindowStripModel.SpaceSection, style: Style,
+         scale k: CGFloat, onClick: @escaping (Int) -> Void) {
         self.chip = chip
         self.section = section
         self.onClick = onClick
-        let w = Self.width(for: chip, compact: compact, sections: sections)
-        let h = WindowStripController.height - 4
-        super.init(frame: NSRect(x: 0, y: 0, width: w, height: h))
+        let h = (WindowStripController.baseHeight - 4) * k
+        super.init(frame: NSRect(x: 0, y: 0, width: Self.width(for: chip, style: style, scale: k), height: h))
         wantsLayer = true
-        layer?.cornerRadius = 5
+        layer?.cornerRadius = 5 * k
         if chip.focused {
             layer?.borderWidth = 1.5
             layer?.borderColor = NSColor.controlAccentColor.cgColor
         }
-
-        let iv = NSImageView(frame: NSRect(x: 6, y: (h - Self.icon) / 2, width: Self.icon, height: Self.icon))
+        let icon = 16 * k
+        let iv = NSImageView(frame: NSRect(x: 5 * k, y: (h - icon) / 2, width: icon, height: icon))
         iv.image = NSRunningApplication(processIdentifier: pid_t(chip.pid))?.icon
             ?? NSWorkspace.shared.icon(for: .applicationBundle)
+        iv.imageScaling = .scaleProportionallyUpOrDown
         addSubview(iv)
-        var x = 6 + Self.icon + 3
-        if !compact {
-            let label = NSTextField(labelWithString: chip.keyword)
-            label.font = Self.font
-            label.textColor = .white
-            label.lineBreakMode = .byTruncatingTail
-            label.sizeToFit()
-            let lw = min(label.frame.width, 140)
-            label.frame = NSRect(x: x, y: (h - label.frame.height) / 2, width: lw, height: label.frame.height)
-            addSubview(label)
-            x += lw + 4
-        }
-        let badge = NSTextField(labelWithString: section.name)
-        badge.font = Self.badgeFont
-        badge.textColor = .white
-        badge.alignment = .center
-        badge.wantsLayer = true
-        badge.drawsBackground = true
-        badge.backgroundColor = NSColor.white.withAlphaComponent(0.18)
-        badge.layer?.cornerRadius = 3
-        badge.sizeToFit()
-        badge.frame = NSRect(x: x, y: (h - 13) / 2, width: Self.badgeWidth(section.name), height: 13)
-        addSubview(badge)
+        guard style != .iconOnly else { return }
+        let label = NSTextField(labelWithString: chip.keyword)
+        label.font = Self.font(k)
+        label.textColor = .white
+        label.lineBreakMode = .byTruncatingTail
+        label.sizeToFit()
+        let x = 5 * k + icon + 4 * k
+        label.frame = NSRect(x: x, y: (h - label.frame.height) / 2,
+                             width: frame.width - x - 1 * k, height: label.frame.height)
+        addSubview(label)
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -249,7 +253,7 @@ private final class StripChip: NSView {
     private func showTooltip() {
         guard let win = window else { return }
         let title = chip.title.isEmpty ? chip.app : "\(chip.app) — \(chip.title)"
-        let label = NSTextField(labelWithString: "\(title)\n\(section.name)")
+        let label = NSTextField(labelWithString: "\(title)\nSpace \(section.name)")
         label.font = .systemFont(ofSize: 12)
         label.textColor = .white
         label.maximumNumberOfLines = 2
@@ -275,14 +279,16 @@ private final class StripChip: NSView {
 
 private final class OverflowChip: NSView {
     private let onClick: () -> Void
-    init(count: Int, onClick: @escaping () -> Void) {
+    init(count: Int, scale k: CGFloat, onClick: @escaping () -> Void) {
         self.onClick = onClick
         super.init(frame: .zero)
         let label = NSTextField(labelWithString: "+\(count)")
-        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.font = .systemFont(ofSize: 11 * k, weight: .semibold)
         label.textColor = .white
         label.alignment = .center
-        label.frame = NSRect(x: 0, y: 3, width: 30, height: 14)
+        label.sizeToFit()
+        label.frame = NSRect(x: 0, y: ((WindowStripController.baseHeight - 4) * k - label.frame.height) / 2,
+                             width: 30 * k, height: label.frame.height)
         addSubview(label)
     }
     required init?(coder: NSCoder) { fatalError() }

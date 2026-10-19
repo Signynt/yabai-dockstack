@@ -848,12 +848,21 @@ do {
     check(strips.first?.sections.first?.chips.first?.focused == true, "focused chip flagged")
     check(strips.first?.sections.first?.chips.first?.keyword == "projA", "chip keyword from WindowLabeler")
     check(strips.first?.hidden == false && strips.last?.hidden == true, "hidden when visible space is native fullscreen")
-    check(WindowStripModel.fit(fullWidths: [100, 100], compactWidth: 40, overflowWidth: 30, available: 250) == .full, "fit: full")
-    check(WindowStripModel.fit(fullWidths: [100, 100, 100], compactWidth: 40, overflowWidth: 30, available: 250) == .compact, "fit: compact")
-    check(WindowStripModel.fit(fullWidths: Array(repeating: 100, count: 30), compactWidth: 40, overflowWidth: 30, available: 250) == .overflow(visible: 5),
-          "fit: 30 windows overflow into +N")
-    check(WindowStripModel.fit(fullWidths: [100], compactWidth: 40, overflowWidth: 30, available: 10) == .overflow(visible: 0),
-          "fit: no room → only +N")
+    func fit(_ n: Int, full: Double, compact: Double, available: Double) -> WindowStripModel.Density {
+        WindowStripModel.fit(fullWidths: Array(repeating: full, count: n),
+                             compactWidths: Array(repeating: compact, count: n),
+                             iconWidth: 30, overflowWidth: 30, available: available)
+    }
+    check(fit(2, full: 100, compact: 50, available: 250) == .full, "fit: full names")
+    check(fit(3, full: 100, compact: 60, available: 250) == .compact, "fit: shortened names")
+    check(fit(6, full: 100, compact: 60, available: 250) == .iconOnly, "fit: icons only")
+    check(fit(30, full: 100, compact: 60, available: 250) == .overflow(visible: 7), "fit: 30 windows overflow into +N")
+    check(fit(1, full: 100, compact: 60, available: 10) == .overflow(visible: 0), "fit: no room → only +N")
+    let sst = WindowStripModel.DisplayStrip(display: 1, hidden: false, sections: [])
+    let sfr = CGRect(x: 0, y: 0, width: 100, height: 100)
+    check(WindowStripModel.needsRender(cached: .init(strip: sst, frame: sfr, scale: 1), strip: sst, frame: sfr, scale: 0.8),
+          "strip size change → re-render")
+    check(AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).windowStripScale == 0.8, "strip size defaults to 0.8")
     check(SpaceInfo.decodeList(#"[{"index":3,"display":2,"is-visible":true,"is-native-fullscreen":true}]"#.data(using: .utf8)!).first?.isNativeFullscreen == true,
           "is-native-fullscreen decoded")
 }

@@ -24,10 +24,24 @@ final class WindowStripModelTests: XCTestCase {
     }
 
     func testFit() {
-        XCTAssertEqual(WindowStripModel.fit(fullWidths: [100, 100], compactWidth: 40, overflowWidth: 30, available: 250), .full)
-        XCTAssertEqual(WindowStripModel.fit(fullWidths: [100, 100, 100], compactWidth: 40, overflowWidth: 30, available: 250), .compact)
-        XCTAssertEqual(WindowStripModel.fit(fullWidths: Array(repeating: 100, count: 30), compactWidth: 40, overflowWidth: 30, available: 250), .overflow(visible: 5))
-        XCTAssertEqual(WindowStripModel.fit(fullWidths: [100], compactWidth: 40, overflowWidth: 30, available: 10), .overflow(visible: 0))
+        func fit(_ n: Int, full: Double, compact: Double, available: Double) -> WindowStripModel.Density {
+            WindowStripModel.fit(fullWidths: Array(repeating: full, count: n),
+                                 compactWidths: Array(repeating: compact, count: n),
+                                 iconWidth: 30, overflowWidth: 30, available: available)
+        }
+        XCTAssertEqual(fit(2, full: 100, compact: 50, available: 250), .full)
+        XCTAssertEqual(fit(3, full: 100, compact: 60, available: 250), .compact)
+        XCTAssertEqual(fit(6, full: 100, compact: 60, available: 250), .iconOnly)
+        XCTAssertEqual(fit(30, full: 100, compact: 60, available: 250), .overflow(visible: 7))
+        XCTAssertEqual(fit(1, full: 100, compact: 60, available: 10), .overflow(visible: 0))
+    }
+
+    func testScaleChangeRerenders() {
+        let s = WindowStripModel.DisplayStrip(display: 1, hidden: false, sections: [])
+        let f = CGRect(x: 0, y: 0, width: 100, height: 100)
+        XCTAssertTrue(WindowStripModel.needsRender(cached: .init(strip: s, frame: f, scale: 1), strip: s, frame: f, scale: 0.8))
+        XCTAssertFalse(WindowStripModel.needsRender(cached: .init(strip: s, frame: f, scale: 0.8), strip: s, frame: f, scale: 0.8))
+        XCTAssertEqual(AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).windowStripScale, 0.8)
     }
 
     func testDecodesNativeFullscreen() {

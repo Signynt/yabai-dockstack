@@ -42,6 +42,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let menuHoverHelp = NSTextField(labelWithString: "")
     private let windowStripCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let windowStripHelp = NSTextField(wrappingLabelWithString: "")
+    private let windowStripSizeSlider = NSSlider(value: 0.8, minValue: 0.5, maxValue: 1.5, target: nil, action: nil)
 
     private let hyperSourcePopup = NSPopUpButton()
     private let hyperQuickPopup = NSPopUpButton()
@@ -197,6 +198,9 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         menuHoverHelp.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         menuHoverHelp.textColor = .secondaryLabelColor
         windowStripCheck.target = self; windowStripCheck.action = #selector(changed)
+        windowStripSizeSlider.target = self; windowStripSizeSlider.action = #selector(changed)
+        windowStripSizeSlider.isContinuous = true
+        windowStripSizeSlider.widthAnchor.constraint(equalToConstant: 200).isActive = true
         windowStripHelp.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         windowStripHelp.textColor = .secondaryLabelColor
         windowStripHelp.preferredMaxLayoutWidth = 340
@@ -307,6 +311,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             [NSGridCell.emptyContentView, menuHoverCheck],
             [NSGridCell.emptyContentView, menuHoverHelp],
             [NSGridCell.emptyContentView, windowStripCheck],
+            row(L10n.t("ui.appearance.windowStripSize"), windowStripSizeSlider),
             [NSGridCell.emptyContentView, windowStripHelp],
             row(L10n.t("ui.appearance.fullWidthSide"), fullWidthPopup),
             row(L10n.t("ui.appearance.debounce"), debounceField),
@@ -514,6 +519,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         hyperQuickPopup.isEnabled = !hyperOff
         hyperShiftCheck.isEnabled = !hyperOff
         windowStripCheck.state = config.windowStrip ? .on : .off
+        windowStripSizeSlider.doubleValue = config.windowStripScale
+        windowStripSizeSlider.isEnabled = config.windowStrip
         fullWidthPopup.selectItem(at: config.fullWidthSide == "right" ? 1 : 0)
         debounceField.integerValue = Int((config.debounceSeconds * 1000).rounded())
         pollField.integerValue = Int((config.pollSeconds * 1000).rounded())
@@ -561,6 +568,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         hyperShiftCheck.isEnabled = hyperSource != .none
         syncHyperStatus(ax: permissionStatus?().0 ?? false)
         config.windowStrip = windowStripCheck.state == .on
+        config.windowStripScale = (windowStripSizeSlider.doubleValue * 20).rounded() / 20
+        windowStripSizeSlider.isEnabled = config.windowStrip
         config.fullWidthSide = fullWidthPopup.indexOfSelectedItem == 1 ? "right" : "left"
         // ms -> seconds, with sane floors
         config.debounceSeconds = max(0.0, Double(debounceField.integerValue) / 1000.0)
