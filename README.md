@@ -32,14 +32,19 @@ dock preview, window switcher, cmd-tab replacement, menu bar, Mission Control al
 
 It is a clean Swift rewrite — **not** a fork of stackline (which required Hammerspoon).
 
-## What's new — v0.2.16
+## What's new — v0.3.0
 
-- New **click-through indicator** option: clicks reach the window under the
-  stack indicator (no hover/click on the indicator itself).
-- Fixed stack indicators that **lingered or showed the wrong stack**
-  (sticky windows, same-frame stacks on other spaces).
-- More reliable **SIP-free space moves**.
-- v0.2.12 introduced the **AltTab-style window switcher** (below).
+- **Project-aware labels** — same-app windows are told apart by project:
+  VS Code / Cursor show the workspace, JetBrains the project, terminals the
+  current folder. Used in the switcher, Dock previews, the window menu and the
+  new window strip.
+- **Window strip** (opt-in) — a strip under the menu bar on each display lists
+  that display's windows with their space; click to jump.
+- **Hover to open** the window menu (opt-in).
+- **⌃-drag to reorder** a stack from its indicator.
+- **Hyper Key** (opt-in) — Caps Lock or a right-hand modifier becomes ⌃⌥⌘⇧.
+- **Fixed** clicking a preview of apps that close to the tray / menu bar
+  (Gather, Surfshark…) — the app's window now comes back.
 
 Full history: [CHANGELOG.md](CHANGELOG.md) ·
 [Releases](https://github.com/z20240/yabai-dockstack/releases)
@@ -66,6 +71,18 @@ Full history: [CHANGELOG.md](CHANGELOG.md) ·
 
 <img src="assets/demo-dock-previews.gif" width="760" alt="dock window previews demo" />
 
+**Project-aware labels** — every VS Code window shows its project name.
+
+<img src="assets/demo-project-labels.jpg" width="760" alt="switcher captions led by each window's project name" />
+
+**Window strip** — each display's windows and their spaces, under the menu bar.
+
+<img src="assets/demo-window-strip.jpg" width="760" alt="per-display window strip under the menu bar" />
+
+**⌃-drag to reorder a stack** — straight from its indicator.
+
+<img src="assets/demo-drag-reorder.gif" width="128" alt="control-drag an indicator icon to reorder the stack" />
+
 ## Features
 
 - 🔄 **AltTab-style window switcher**: hold **⌥** + tap **Tab** to cycle every
@@ -79,7 +96,13 @@ Full history: [CHANGELOG.md](CHANGELOG.md) ·
   focused window highlighted. **Flag mode**: slim minimal markers. Toggle from
   the menu bar.
 - 🔎 **Hover** an indicator → popover with that window's full title.
-- 🖱️ **Click** an indicator → focus that window (via yabai).
+- 🖱️ **Click** an indicator → focus that window (via yabai); **⌃-drag** an icon
+  to reorder the stack.
+- 🏷️ **Project-aware labels**: windows of the same app are labelled by project
+  (VS Code workspace, JetBrains project, terminal folder) everywhere.
+- 📋 **Window strip** (opt-in): every window on a display, with its space,
+  under that display's menu bar. **Hover-to-open** window menu (opt-in).
+- ✦ **Hyper Key** (opt-in): Caps Lock / right ⌘ / ⌥ / ⌃ acts as ⌃⌥⌘⇧.
 - 🖥️ Multi-monitor, all visible spaces.
 - ⌃⌘← ⌃⌘→ **Send to space hotkeys** — move windows left/right one space, or to
   a numbered space, with SIP fully enabled (simulated native gestures).
@@ -198,7 +221,16 @@ falls back to its default. All keys:
   "showBackground": true,
   "backgroundColor": "#1E1E1ECC",
   "confineToGap": true,
+  "indicatorClickThrough": false,
+  "indicatorDragReorder": true,
   "dockPreview": true,
+  "menuOpenOnHover": false,
+  "windowStrip": false,
+  "windowStripScale": 0.8,
+  "hyperKey": "none",
+  "hyperQuickPress": "none",
+  "hyperIncludeShift": true,
+  "hyperShowSymbol": false,
   "language": "auto",
   "switcherEnabled": true,
   "switcherAppearance": "thumbnails",
@@ -219,6 +251,12 @@ falls back to its default. All keys:
 - `showBackground`: draw a rounded backing pill behind the indicators so they read
   as a floating chip (helpful over full-width windows). `true`/`false`.
 - `backgroundColor`: backing pill color, `"#RRGGBB"` / `"#RRGGBBAA"`.
+- `indicatorDragReorder`: ⌃-drag an indicator icon to reorder its stack
+  (ignored while `indicatorClickThrough` is on).
+- `menuOpenOnHover`: open the window menu when the pointer rests on the menu
+  bar icon. `windowStrip`: show the per-display window strip;
+  `windowStripScale`: its size (0.5–1.5, default 0.8).
+- `hyper*`: see [Hyper Key](#hyper-key).
 - `switcher*`: the window switcher — `switcherAppearance` is `"thumbnails"`,
   `"icons"` or `"titles"`; the three hotkeys use skhd notation (`"alt - tab"`;
   `0x32` is backtick; empty string disables that scope). All editable from
@@ -377,6 +415,39 @@ to jump to its space and focus it (like a Windows-taskbar peek / DockView).
   in place. Closing the app's **last** window quits the app itself, so apps that
   merely hide their window on close (Music, …) actually go away.
 - **Toggle:** Settings → **Dock window previews** (on by default).
+
+## Window strip & hover menu
+
+Both are off by default — turn them on in **Settings → Appearance**.
+
+- **Window strip**: one strip per display, right under the menu bar. It lists
+  every window on *that* display (all of its spaces) as icon + label (the
+  project name for editors), with a divider between spaces; the current space
+  is highlighted and the focused window outlined. Hover a chip for the full
+  title and space, click to jump. With many windows the labels shorten, then
+  only icons remain, then a **+N** chip opens the window menu. Drag **Window
+  strip size** in Settings to resize it. It hides over native-fullscreen
+  spaces and may cover the top of windows — raise yabai's `top_padding` if
+  you want it clear.
+- **Hover to open**: rest the pointer on the menu bar icon for ¼ s and the
+  window menu opens. The menu also has a hotkey (Settings → Keyboard →
+  "Open window menu").
+
+## Hyper Key
+
+Optional, **off by default** (Settings → **Hyper Key**). Holding the chosen key
+acts as ⌃⌥⌘⇧ held together, so you can bind lots of conflict-free shortcuts
+(skhd: `hyper - h`).
+
+- **Key**: None / Caps Lock / Right ⌘ / Right ⌥ / Right ⌃.
+- **Quick press** (tap alone): Nothing / Escape / Toggle Caps Lock (Caps Lock only).
+- **Include Shift**: off → ⌃⌥⌘ only (bind it in skhd as `ctrl + alt + cmd - h`).
+- **Show ⌃⌥⌘⇧ as ✦** in the shortcut editor.
+- Needs **Accessibility**. Uses `hidutil` (the chosen key becomes F18 while the
+  app runs; your other `hidutil` mappings are kept and ours is removed on quit
+  and on the next launch after a crash).
+- Don't enable it if Raycast or Karabiner already gives you a Hyper Key.
+  Doesn't apply in password fields (Secure Input).
 
 ## Is it safe? (signing & permissions)
 

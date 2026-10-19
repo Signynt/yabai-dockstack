@@ -3,6 +3,27 @@
 All notable changes to yabai-dockstack. Full release notes and downloads live on
 the [GitHub Releases](https://github.com/z20240/yabai-dockstack/releases) page.
 
+## v0.3.0 — 2026-10-19
+
+- **Project-aware window labels** — windows of the same app are labelled by
+  what tells them apart: VS Code / Cursor / Windsurf → workspace, JetBrains →
+  project, terminals → current folder, otherwise the part of the title that
+  differs. Shown first (bold) in switcher captions, Dock previews, the window
+  menu and the window strip; the full title is on hover.
+- **Window strip** (opt-in) — one strip per display under the menu bar listing
+  that display's windows (icon + project-aware label, divider between spaces);
+  click to jump, hover for title and space, resizable from Settings, "+N"
+  overflow opens the menu; hidden over native-fullscreen spaces.
+- **Hover to open the window menu** (opt-in).
+- **⌃-drag to reorder a stack** from its indicator (on by default; uses yabai
+  `--swap`, works without the scripting addition).
+- **Hyper Key** (opt-in) — Caps Lock / right ⌘ / ⌥ / ⌃ → ⌃⌥⌘(⇧), with quick
+  press (Escape / toggle Caps Lock) and an optional ✦ display; restores the key
+  on quit, SIGTERM, and the next launch after a crash.
+- **Fixed: clicking tray-closed apps did nothing** — Gather, Surfshark and
+  similar apps keep their closed window listed without an AX reference, so yabai
+  can't focus it; the app is now reopened instead, which brings that window back.
+
 ## v0.2.16 — 2026-10-14
 
 - **Click-through stack indicator** — new Settings option: clicks pass through
