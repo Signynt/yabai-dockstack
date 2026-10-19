@@ -29,11 +29,14 @@ public enum HyperKeyMapping {
     static let srcKey = "HIDKeyboardModifierMappingSrc"
     static let dstKey = "HIDKeyboardModifierMappingDst"
 
-    /// Parses `hidutil property --get UserKeyMapping` output (OpenStep plist, or "(null)").
-    public static func parse(_ output: String) -> [[String: UInt64]] {
+    /// Parses `hidutil property --get UserKeyMapping` output (OpenStep plist, or
+    /// "(null)"). Nil when unreadable — callers must not mistake that for "no
+    /// mappings" and overwrite the user's own.
+    public static func parse(_ output: String) -> [[String: UInt64]]? {
+        if output.trimmingCharacters(in: .whitespacesAndNewlines) == "(null)" { return [] }
         guard let data = output.data(using: .utf8),
               let list = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [[String: Any]]
-        else { return [] }
+        else { return nil }
         return list.compactMap { entry in
             guard let src = number(entry[srcKey]), let dst = number(entry[dstKey]) else { return nil }
             return [srcKey: src, dstKey: dst]
@@ -66,7 +69,12 @@ public enum HyperKeyMapping {
 /// hyper up: only OR-ing flags onto key events at the HID level leaves the
 /// system believing ⌃⌥⌘⇧ are still held afterwards (stuck modifiers).
 public struct HyperKeyReducer: Equatable {
-    public enum Event { case hyperDown, hyperUp, keyDown, keyUp }
+    public enum Event {
+        case hyperDown, hyperUp, keyDown, keyUp
+        /// Polling found the hyper key physically up while we think it's held
+        /// (its keyUp was missed, e.g. Secure Input took over mid-press).
+        case hyperFoundUp
+    }
     public enum Action: Equatable {
         case pass, addHyperFlags, swallow
         /// Swallow the hyper key and post modifier key-downs.
@@ -100,6 +108,29 @@ public struct HyperKeyReducer: Equatable {
             return .addHyperFlags
         case .keyUp:
             return held ? .addHyperFlags : .pass
+        case .hyperFoundUp:
+            guard held else { return .swallow }
+            held = false; used = false
+            return .releaseModifiers
         }
+    }
+}
+
+/// Decisions that keep the Hyper Key from ever leaving its source key dead.
+public enum HyperKeyPlan {
+    public enum Health: Equatable { case start, stop, keep }
+
+    /// Periodic check: start once Accessibility is granted; stop (restoring the
+    /// key) if it was revoked while running.
+    public static func health(configured: HyperSource, ax: Bool, running: Bool) -> Health {
+        guard configured != .none else { return .keep }
+        if running && !ax { return .stop }
+        if !running && ax { return .start }
+        return .keep
+    }
+
+    /// Remap the source key only while a tap is there to turn F18 into hyper.
+    public static func mapping(configured: HyperSource, tapRunning: Bool) -> HyperSource {
+        tapRunning ? configured : .none
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Per-display window strip shown under the menu bar: every window on a
 /// display, grouped by space, labelled with its `WindowLabeler` keyword.
@@ -24,6 +25,22 @@ public enum WindowStripModel {
         /// The display's visible space is a native-fullscreen space.
         public let hidden: Bool
         public let sections: [SpaceSection]
+        public init(display: Int, hidden: Bool, sections: [SpaceSection]) {
+            self.display = display; self.hidden = hidden; self.sections = sections
+        }
+    }
+
+    /// What a display's panel was last drawn from.
+    public struct Rendered: Equatable {
+        public let strip: DisplayStrip
+        public let frame: CGRect
+        public init(strip: DisplayStrip, frame: CGRect) { self.strip = strip; self.frame = frame }
+    }
+
+    /// Redraw when the content or the screen's frame (resolution, arrangement,
+    /// menu bar) changed.
+    public static func needsRender(cached: Rendered?, strip: DisplayStrip, frame: CGRect) -> Bool {
+        cached != Rendered(strip: strip, frame: frame)
     }
 
     /// Displays ascending; per display only spaces that have windows, ascending;

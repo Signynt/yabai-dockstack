@@ -323,10 +323,13 @@ public enum YabaiDockstack {
             // Activate Dock previews once Accessibility is granted (no relaunch).
             ensureDockController()
             ensureSwitcherTap()
-            // Activate the Hyper Key once Accessibility is granted (no relaunch).
-            if config.hyperKey != HyperSource.none.rawValue, !hyperKey.isRunning,
-               PermissionsHelper.hasAccessibility() {
-                applyHyperKey()
+            // Start the Hyper Key once Accessibility is granted (no relaunch);
+            // stop it — restoring the key — if Accessibility is revoked.
+            switch HyperKeyPlan.health(configured: HyperSource(rawValue: config.hyperKey) ?? .none,
+                                       ax: PermissionsHelper.hasAccessibility(),
+                                       running: hyperKey.isRunning) {
+            case .start, .stop: applyHyperKey()
+            case .keep: break
             }
             guard client.isAvailable() else { return }
             if !SignalInstaller.isInstalled(client: client) {

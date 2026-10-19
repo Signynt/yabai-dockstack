@@ -21,10 +21,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     }
     private var hoverTimer: Timer?
     private var hoverMonitors: [Any] = []
-    private var pointerInside = false
-    /// The menu just closed with the pointer still on the icon: don't reopen
-    /// it until the pointer has left once.
-    private var suppressUntilExit = false
+    private var hover = HoverOpenLogic()
 
     public override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -50,7 +47,9 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     private func updateHoverMonitors() {
         hoverMonitors.forEach(NSEvent.removeMonitor)
         hoverMonitors = []
-        pointerChanged(inside: false)
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        _ = hover.pointer(inside: false)
         guard openOnHover else { return }
         if let g = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: { [weak self] _ in
             self?.checkPointer()
@@ -65,25 +64,48 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         return win.convertToScreen(button.convert(button.bounds, to: nil))
     }
 
-    private func checkPointer() {
-        let inside = buttonScreenRect?.contains(NSEvent.mouseLocation) ?? false
-        if inside != pointerInside { pointerChanged(inside: inside) }
+    /// Where the icon is drawn on the screen under the pointer. The real button
+    /// only lives on the active display's menu bar; other menu bars draw a copy
+    /// at the same distance from their right edge. `onButtonScreen` is false for
+    /// such a copy.
+    private func hoverTarget() -> (rect: NSRect, screen: NSScreen, onButtonScreen: Bool)? {
+        let mouse = NSEvent.mouseLocation
+        guard let icon = buttonScreenRect,
+              let buttonScreen = statusItem.button?.window?.screen,
+              let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) else { return nil }
+        let rect = HoverOpenLogic.mirrored(icon, from: buttonScreen.frame, to: screen.frame)
+        return (rect, screen, screen == buttonScreen)
     }
 
-    private func pointerChanged(inside: Bool) {
-        pointerInside = inside
+    private var pointerOnIcon: Bool {
+        hoverTarget()?.rect.contains(NSEvent.mouseLocation) ?? false
+    }
+
+    private func checkPointer() {
+        let inside = pointerOnIcon
+        guard inside != hover.inside else { return }
+        if !inside { hoverTimer?.invalidate(); hoverTimer = nil }
+        guard hover.pointer(inside: inside) else { return }
         hoverTimer?.invalidate()
-        hoverTimer = nil
-        guard inside else { suppressUntilExit = false; return }
-        guard openOnHover, !suppressUntilExit else { return }
         hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
-            guard let self, self.buttonScreenRect?.contains(NSEvent.mouseLocation) == true else { return }
-            self.openMenu()
+            guard let self, self.hover.timerFired(pointerInside: self.pointerOnIcon),
+                  let target = self.hoverTarget() else { return }
+            if target.onButtonScreen {
+                self.openMenu()
+            } else {
+                // Clicking the copy would first switch the active display; pop
+                // the same menu right under the copy instead.
+                let f = target.screen.frame, vf = target.screen.visibleFrame
+                let menuBarBottom = vf.maxY < f.maxY ? vf.maxY : f.maxY - NSStatusBar.system.thickness
+                self.menu.popUp(positioning: nil, at: NSPoint(x: target.rect.minX, y: menuBarBottom), in: nil)
+            }
         }
     }
 
     public func menuDidClose(_ menu: NSMenu) {
-        if buttonScreenRect?.contains(NSEvent.mouseLocation) == true { suppressUntilExit = true }
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        hover.menuClosed(pointerInside: pointerOnIcon)
     }
 
     // Rebuild dynamic contents whenever the menu is about to open.

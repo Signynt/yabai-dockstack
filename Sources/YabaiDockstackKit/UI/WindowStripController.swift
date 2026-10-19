@@ -8,7 +8,7 @@ public final class WindowStripController {
     private let focuser: WindowFocuser
     private var enabled = false
     private var panels: [Int: NSPanel] = [:]
-    private var rendered: [Int: WindowStripModel.DisplayStrip] = [:]
+    private var rendered: [Int: WindowStripModel.Rendered] = [:]
     /// The "+N" chip was clicked (wired to opening the window menu).
     public var onOverflowClick: (() -> Void)?
 
@@ -50,8 +50,11 @@ public final class WindowStripController {
                   let screen = screens.first(where: { abs($0.yabaiFrame.x - frame.x) < 1 && abs($0.yabaiFrame.y - frame.y) < 1 }),
                   let ns = NSScreen.screens.first(where: { $0.frame == screen.cocoaFrame }) else { continue }
             live.insert(strip.display)
-            if rendered[strip.display] == strip, panels[strip.display] != nil { continue }
-            rendered[strip.display] = strip
+            if panels[strip.display] != nil,
+               !WindowStripModel.needsRender(cached: rendered[strip.display], strip: strip, frame: ns.visibleFrame) {
+                continue
+            }
+            rendered[strip.display] = WindowStripModel.Rendered(strip: strip, frame: ns.visibleFrame)
             let panel = panels[strip.display] ?? makePanel()
             panels[strip.display] = panel
             let content = StripView(strip: strip, maxWidth: ns.visibleFrame.width / 2,

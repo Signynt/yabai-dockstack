@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import CoreGraphics
 import IOKit
 import IOKit.hidsystem
@@ -19,6 +20,9 @@ public final class HyperKeyController {
     private var flags: CGEventFlags = []
     /// (keycode, flag) of each hyper modifier, in press order.
     private var modifierKeys: [(CGKeyCode, CGEventFlags)] = []
+    /// While held: under Secure Input the tap can miss the hyper keyUp, so poll
+    /// the key's state then, and release the modifiers instead of leaving them stuck.
+    private var heldWatch: Timer?
 
     public init() {}
 
@@ -26,13 +30,13 @@ public final class HyperKeyController {
 
     /// `.none` (or missing Accessibility) disables: removes our mapping, stops the tap.
     public func apply(source: HyperSource, quickPress: HyperQuickPress, includeShift: Bool) {
-        let active = source != .none && PermissionsHelper.hasAccessibility()
-        setMapping(active ? source : .none)
         self.quickPress = quickPress
         modifierKeys = [(59, .maskControl), (58, .maskAlternate), (55, .maskCommand)]
         if includeShift { modifierKeys.append((56, .maskShift)) }
         flags = modifierKeys.reduce(into: CGEventFlags()) { $0.insert($1.1) }
-        if active { startTap() } else { stopTap() }
+        if source != .none && PermissionsHelper.hasAccessibility() { startTap() } else { stopTap() }
+        // Tap first: if it couldn't be created, the key stays as it is.
+        setMapping(HyperKeyPlan.mapping(configured: source, tapRunning: isRunning))
     }
 
     public func shutdown() {
@@ -42,7 +46,10 @@ public final class HyperKeyController {
     // MARK: - hidutil
 
     private func setMapping(_ source: HyperSource) {
-        let current = HyperKeyMapping.parse(Self.hidutil(["property", "--get", "UserKeyMapping"]))
+        guard let current = HyperKeyMapping.parse(Self.hidutil(["property", "--get", "UserKeyMapping"])) else {
+            NSLog("yabai-dockstack: unreadable hidutil mapping — leaving it untouched")
+            return
+        }
         let next = HyperKeyMapping.merged(existing: current, source: source)
         guard next != current else { return }
         _ = Self.hidutil(["property", "--set", HyperKeyMapping.hidutilJSON(next)])
@@ -124,12 +131,15 @@ public final class HyperKeyController {
             return nil
         case .pressModifiers:
             postModifiers(down: true)
+            startHeldWatch()
             return nil
         case .releaseModifiers:
             postModifiers(down: false)
+            stopHeldWatch()
             return nil
         case .quickPress:
             postModifiers(down: false)
+            stopHeldWatch()
             DispatchQueue.main.async { [quickPress] in Self.perform(quickPress) }
             return nil
         }
@@ -151,6 +161,27 @@ public final class HyperKeyController {
     private func releaseIfHeld() {
         if reducer.held { postModifiers(down: false) }
         reducer = HyperKeyReducer()
+        stopHeldWatch()
+    }
+
+    private func startHeldWatch() {
+        heldWatch?.invalidate()
+        let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            // Only trust the polled key state under Secure Input — the case where
+            // the tap misses keyUps. Otherwise the tap's own keyUp is authoritative.
+            guard IsSecureEventInputEnabled(),
+                  !CGEventSource.keyState(.hidSystemState, key: CGKeyCode(Self.f18KeyCode)) else { return }
+            if self.reducer.handle(.hyperFoundUp) == .releaseModifiers { self.postModifiers(down: false) }
+            self.stopHeldWatch()
+        }
+        RunLoop.main.add(t, forMode: .common)
+        heldWatch = t
+    }
+
+    private func stopHeldWatch() {
+        heldWatch?.invalidate()
+        heldWatch = nil
     }
 
     private static func perform(_ action: HyperQuickPress) {

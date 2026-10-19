@@ -865,7 +865,7 @@ print("HyperKey")
 do {
     let user: [String: UInt64] = ["HIDKeyboardModifierMappingSrc": 30064771299, "HIDKeyboardModifierMappingDst": 30064771300]
     let ours: [String: UInt64] = ["HIDKeyboardModifierMappingSrc": 0x700000039, "HIDKeyboardModifierMappingDst": HyperKeyMapping.f18]
-    check(HyperKeyMapping.parse("(null)").isEmpty, "hidutil (null) → no mappings")
+    check(HyperKeyMapping.parse("(null)") == [], "hidutil (null) → no mappings")
     check(HyperKeyMapping.parse("(\n    {\n    HIDKeyboardModifierMappingDst = 30064771300;\n    HIDKeyboardModifierMappingSrc = 30064771299;\n}\n)") == [user],
           "hidutil OpenStep output parsed")
     check(HyperKeyMapping.merged(existing: [user], source: .capsLock) == [user, ours], "merge appends ours, keeps user's")
@@ -887,6 +887,42 @@ do {
     let c = AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8))
     check(c.hyperKey == "none" && c.hyperQuickPress == "none" && c.hyperIncludeShift && !c.hyperShowSymbol,
           "hyper defaults (off, shift on)")
+}
+
+print("Review fixes")
+do {
+    check(HyperKeyPlan.health(configured: .capsLock, ax: true, running: false) == .start, "health: start when AX granted")
+    check(HyperKeyPlan.health(configured: .capsLock, ax: false, running: true) == .stop, "health: stop when AX revoked mid-run")
+    check(HyperKeyPlan.health(configured: .capsLock, ax: true, running: true) == .keep, "health: keep when running")
+    check(HyperKeyPlan.health(configured: .none, ax: true, running: false) == .keep, "health: off stays off")
+    check(HyperKeyPlan.mapping(configured: .capsLock, tapRunning: false) == HyperSource.none, "no remap without a running tap")
+    check(HyperKeyPlan.mapping(configured: .capsLock, tapRunning: true) == .capsLock, "remap once tap runs")
+    check(HyperKeyMapping.parse("hidutil: error") == nil, "unparseable hidutil output → nil, not []")
+    check(HyperKeyMapping.parse("(\n)") == [], "empty hidutil list → []")
+    var r = HyperKeyReducer()
+    _ = r.handle(.hyperDown); _ = r.handle(.keyDown)
+    check(r.handle(.hyperFoundUp) == .releaseModifiers && r.handle(.hyperUp) == .swallow,
+          "missed hyper up (secure input) releases modifiers once")
+    _ = r.handle(.hyperDown)
+    check(r.handle(.hyperFoundUp) == .releaseModifiers, "found-up is never a quick press")
+    var h = HoverOpenLogic()
+    check(h.pointer(inside: true), "hover arms timer")
+    h.menuClosed(pointerInside: true)
+    check(!h.timerFired(pointerInside: true), "stale hover timer doesn't reopen a closed menu")
+    check(!h.pointer(inside: true), "still suppressed until pointer leaves")
+    _ = h.pointer(inside: false)
+    check(h.pointer(inside: true) && h.timerFired(pointerInside: true), "re-enter opens again")
+    let st = WindowStripModel.DisplayStrip(display: 1, hidden: false, sections: [])
+    let fr = CGRect(x: 0, y: 0, width: 100, height: 100)
+    check(!WindowStripModel.needsRender(cached: .init(strip: st, frame: fr), strip: st, frame: fr), "same strip+frame → skip")
+    check(WindowStripModel.needsRender(cached: .init(strip: st, frame: fr), strip: st, frame: fr.offsetBy(dx: 10, dy: 0)),
+          "screen frame change → re-render")
+    let icon = CGRect(x: 2422, y: 2171, width: 36, height: 24)
+    let active = CGRect(x: 978, y: 1117, width: 1920, height: 1080)
+    check(HoverOpenLogic.mirrored(icon, from: active, to: CGRect(x: -942, y: 1117, width: 1920, height: 1080))
+          == CGRect(x: 502, y: 2157, width: 36, height: 40), "status icon mirrored onto another external display")
+    check(HoverOpenLogic.mirrored(icon, from: active, to: CGRect(x: 0, y: 0, width: 1728, height: 1117))
+          == CGRect(x: 1252, y: 1077, width: 36, height: 40), "status icon mirrored onto the laptop display")
 }
 
 print("")
