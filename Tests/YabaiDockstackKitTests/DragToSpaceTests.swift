@@ -25,4 +25,27 @@ final class DragToSpaceTests: XCTestCase {
         let other = ShortcutBinding(actionID: "open-window-menu", enabled: true, hotkey: hk)
         XCTAssertEqual(ShortcutBindings.setting([other], action: "open-window-switcher", hotkey: hk).count, 2)
     }
+
+    func testUnfocusableWindowIsNotWalked() throws {
+        let path = NSTemporaryDirectory() + "fake-yabai-\(UUID().uuidString)"
+        try "#!/bin/sh\ncase \"$*\" in *--focus*) exit 1 ;; esac\n".write(toFile: path, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        let sim = RecordingSimulator()
+        let mover = SpaceMover(client: YabaiClient(yabaiPath: path), simulator: sim, probe: NoProbe())
+        XCTAssertEqual(mover.moveWindow(id: 7, toSpace: 3), .focusFailed)
+        XCTAssertEqual(sim.walks, 0)
+    }
+}
+
+final class RecordingSimulator: SpaceSimulating {
+    var walks = 0
+    func dragWalk(grabPoints: [CGPoint], direction: ArrowDirection, count: Int,
+                  liftCheck: (() -> Bool)?) -> DragWalkOutcome {
+        walks += 1
+        return .walked(observedAll: true)
+    }
+}
+
+struct NoProbe: GrabPointProbing {
+    func role(at point: CGPoint) -> String? { nil }
 }

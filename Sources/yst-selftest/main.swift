@@ -951,6 +951,23 @@ do {
           "clearing a binding disables it")
 }
 
+print("Drag to space: SpaceMover.moveWindow")
+do {
+    final class RecSim: SpaceSimulating {
+        var walks = 0
+        func dragWalk(grabPoints: [CGPoint], direction: ArrowDirection, count: Int,
+                      liftCheck: (() -> Bool)?) -> DragWalkOutcome { walks += 1; return .walked(observedAll: true) }
+    }
+    struct NoProbe: GrabPointProbing { func role(at point: CGPoint) -> String? { nil } }
+    let path = NSTemporaryDirectory() + "fake-yabai-\(UUID().uuidString)"
+    try? "#!/bin/sh\ncase \"$*\" in *--focus*) exit 1 ;; esac\n".write(toFile: path, atomically: true, encoding: .utf8)
+    try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+    let sim = RecSim()
+    let mover = SpaceMover(client: YabaiClient(yabaiPath: path), simulator: sim, probe: NoProbe())
+    check(mover.moveWindow(id: 7, toSpace: 3) == .focusFailed && sim.walks == 0,
+          "unfocusable (tray-closed) window → focusFailed, no simulated walk")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

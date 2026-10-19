@@ -1,5 +1,13 @@
 import Foundation
 
+public enum MoveOutcome: Equatable {
+    case moved
+    /// The window couldn't be focused (e.g. closed to the tray) — nothing moved.
+    case focusFailed
+    /// The walk gave up midway (no lift, focus changed); the window stays put.
+    case aborted
+}
+
 /// Executes SIP-free window-to-space moves: parses socket commands, plans via
 /// SpaceTravelPlanner, and performs the steps (AX display hop + simulated drag).
 /// The scripts only route here when the scripting addition is unavailable.
@@ -30,19 +38,34 @@ public final class SpaceMover {
         let parts = command.split(separator: " ").map(String.init)
         guard parts.count == 2, parts[0] == "move-space",
               let target = SpaceTarget.parse(parts[1]) else { return }
-        queue.async { [self] in moveFocusedWindow(to: target) }
+        queue.async { [self] in _ = moveFocusedWindow(to: target) }
     }
 
-    private func moveFocusedWindow(to target: SpaceTarget) {
+    /// Moves any window (not just the focused one) to `toSpace`: focus it —
+    /// which jumps to its space — then walk it over. Synchronous; blocks for
+    /// the walk, so call it off the main thread.
+    public func moveWindow(id: Int, toSpace space: Int) -> MoveOutcome {
+        guard client.focus(windowId: id) else { return .focusFailed }
+        var focused = false
+        for _ in 0..<20 {
+            if client.queryFocusedWindow()?.id == id { focused = true; break }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        guard focused else { return .focusFailed }
+        Thread.sleep(forTimeInterval: 0.2)  // let the space switch settle before grabbing
+        return moveFocusedWindow(to: .index(space))
+    }
+
+    private func moveFocusedWindow(to target: SpaceTarget) -> MoveOutcome {
         guard let window = client.queryFocusedWindow() else {
             NSLog("yabai-dockstack: move-space aborted, no focused window")
-            return
+            return .aborted
         }
         guard let plan = SpaceTravelPlanner.plan(
             target: target, windowSpace: window.space, windowDisplay: window.display,
             spaces: client.querySpacesInfo(), displays: client.queryDisplaysInfo()) else {
             NSLog("yabai-dockstack: move-space aborted, planner returned nil")
-            return
+            return .aborted
         }
 
         // A tiled window can't be repositioned across displays ("cannot move a
@@ -72,7 +95,7 @@ public final class SpaceMover {
                 // Re-query: the frame moved if a display hop happened.
                 guard let fresh = client.queryFocusedWindow(), fresh.id == window.id else {
                     NSLog("yabai-dockstack: move-space aborted, focused window changed before arrow walk")
-                    return
+                    return .aborted
                 }
                 // Pick drag points along the top strip, AX-probing each spot to
                 // skip controls that would activate (search fields, buttons)
@@ -89,7 +112,7 @@ public final class SpaceMover {
                 switch outcome {
                 case .neverLifted:
                     NSLog("yabai-dockstack: move-space aborted, no grab attempt lifted the window")
-                    return
+                    return .aborted
                 case .walked(let observedAll):
                     if !observedAll {
                         NSLog("yabai-dockstack: move-space walk not fully observed")
@@ -97,5 +120,6 @@ public final class SpaceMover {
                 }
             }
         }
+        return .moved
     }
 }
