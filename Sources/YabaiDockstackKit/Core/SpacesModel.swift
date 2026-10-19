@@ -92,58 +92,6 @@ public enum SpacesModel {
     }
 }
 
-/// A concrete operation required to apply a dragged space position.
-public enum SpacesReorderOperation: Equatable {
-    case moveToDisplay(Int)
-    case movePrevious
-    case moveNext
-}
-
-public enum SpacesReorderPlanner {
-    /// Plans a drag from the current display/index to a destination display and
-    /// insertion index. Indices are interpreted from the pre-mutation snapshot;
-    /// callers must re-query yabai after applying the operations.
-    public static func plan(source: SpaceInfo, sourceIndex: Int,
-                            destinationDisplay: Int, destinationIndex: Int,
-                            spaces: [SpaceInfo]) -> [SpacesReorderOperation]? {
-        guard spaces.contains(where: { $0.index == source.index }),
-              destinationIndex >= 0 else { return nil }
-
-        let byDisplay = Dictionary(grouping: spaces.filter { $0.index != source.index },
-                                   by: \ .display)
-        let destination = (byDisplay[destinationDisplay] ?? [])
-            .sorted { $0.index < $1.index }
-        guard destinationIndex <= destination.count else { return nil }
-
-        var operations: [SpacesReorderOperation] = []
-        if source.display != destinationDisplay {
-            operations.append(.moveToDisplay(destinationDisplay))
-        }
-
-        let insertionIndex = min(destinationIndex, destination.count)
-        let currentIndex: Int
-        if source.display == destinationDisplay {
-            let original = spaces
-                .filter { $0.display == source.display }
-                .sorted { $0.index < $1.index }
-            guard let index = original.firstIndex(where: { $0.index == source.index }) else { return nil }
-            currentIndex = index
-        } else {
-            // yabai adds a space moved to another display at that display's
-            // trailing edge; walk it back to the requested insertion point.
-            currentIndex = destination.count
-        }
-
-        let steps = insertionIndex - currentIndex
-        if steps < 0 {
-            operations.append(contentsOf: repeatElement(.movePrevious, count: -steps))
-        } else if steps > 0 {
-            operations.append(contentsOf: repeatElement(.moveNext, count: steps))
-        }
-        return operations
-    }
-}
-
 /// Bounded geometry for the Spaces View's repeated cards.
 public struct SpacesLayoutMetrics: Equatable {
     public let columns: Int

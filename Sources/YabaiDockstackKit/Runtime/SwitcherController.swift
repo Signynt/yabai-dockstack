@@ -90,8 +90,7 @@ public final class SwitcherController {
         let filtered = visibilityProbe.liveWindowIDs(wins).map { ids in
             wins.filter { ids.contains($0.id) }
         } ?? wins
-        return SpacesModel.displayableWindows(
-            filtered, hiddenIDs: visibilityProbe.hiddenWindowIDs(filtered))
+        return SpacesModel.displayableWindows(filtered)  // drops yabai scratchpad windows
     }
 
     /// Refresh feed (any thread): remember the raw list, keep the MRU in sync.

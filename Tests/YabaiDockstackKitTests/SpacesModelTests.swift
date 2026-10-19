@@ -66,26 +66,6 @@ final class SpacesModelTests: XCTestCase {
         XCTAssertTrue(SpacesModel.displayableWindows([settingsScratchpad]).contains { $0.id == 7 })
     }
 
-    func testSameDisplayReorderUsesAdjacentMoves() {
-        let operations = SpacesReorderPlanner.plan(
-            source: spaces[0], sourceIndex: 0,
-            destinationDisplay: 1, destinationIndex: 1, spaces: spaces)
-        XCTAssertEqual(operations, [.moveNext])
-    }
-
-    func testCrossDisplayReorderMovesToTrailingEdgeThenBack() {
-        let operations = SpacesReorderPlanner.plan(
-            source: spaces[0], sourceIndex: 0,
-            destinationDisplay: 2, destinationIndex: 0, spaces: spaces)
-        XCTAssertEqual(operations, [.moveToDisplay(2), .movePrevious])
-    }
-
-    func testInvalidInsertionIsRejected() {
-        XCTAssertNil(SpacesReorderPlanner.plan(
-            source: spaces[0], sourceIndex: 0,
-            destinationDisplay: 1, destinationIndex: 4, spaces: spaces))
-    }
-
     func testLayoutHasStablePositiveDimensions() {
         let metrics = SpacesLayout.metrics(displayCount: 6, maxWidth: 1200, maxHeight: 700)
         XCTAssertGreaterThan(metrics.spaceWidth, 0)

@@ -12,9 +12,6 @@ public final class RefreshCoordinator {
     /// Raw (unfiltered) window list from each refresh — feeds the switcher's MRU.
     /// Called on the coordinator's queue; the receiver hops threads itself.
     public var onWindows: (([YabaiWindow]) -> Void)?
-    /// Complete yabai snapshot for views that need spaces as well as windows.
-    /// Called on the coordinator's queue; receivers must hop threads.
-    public var onSnapshot: (([YabaiWindow], [SpaceInfo], [Int: String]) -> Void)?
 
     public init(config: AppConfig, client: YabaiClient, onStacks: @escaping ([Stack]) -> Void) {
         self.config = config
@@ -38,7 +35,6 @@ public final class RefreshCoordinator {
     private func run() {
         let raw = client.queryWindows()
         onWindows?(raw)
-        onSnapshot?(raw, client.querySpacesInfo(), client.querySpaceLabels())
         let windows = VisibleSpaceFilter.apply(raw)
         let stacks = StackBuilder.build(windows)
         if RefreshDiff.shouldRedraw(old: last, new: stacks) {

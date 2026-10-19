@@ -607,10 +607,10 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         switcherCmdTabCheck.state = config.switcherCaptureCmdTab ? .on : .off
         // ⌘⇥ capture rides on the hold-to-cycle tap; make the dependency visible.
         switcherCmdTabCheck.isEnabled = config.switcherEnabled && config.switcherHoldToCycle
-        spacesFocusDestinationCheck.state = config.spacesViewFocusDestination ? .on : .off
-        spacesWallpaperCheck.state = config.spacesViewWallpaper ? .on : .off
-        spacesWallpaperPathField.stringValue = config.spacesViewWallpaperPath
-        spacesWallpaperDarkPathField.stringValue = config.spacesViewWallpaperDarkPath
+        spacesFocusDestinationCheck.state = config.switcherFollowMove ? .on : .off
+        spacesWallpaperCheck.state = config.switcherWallpaper ? .on : .off
+        spacesWallpaperPathField.stringValue = config.switcherWallpaperPath
+        spacesWallpaperDarkPathField.stringValue = config.switcherWallpaperDarkPath
         switcherAllRecorder.hotkey = Hotkey.parse(config.switcherHotkeyAll)
         switcherAppRecorder.hotkey = Hotkey.parse(config.switcherHotkeyApp)
         switcherSpaceRecorder.hotkey = Hotkey.parse(config.switcherHotkeySpace)
@@ -660,10 +660,10 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             (0..<Self.switcherAppearanceOrder.count).contains(sIdx) ? sIdx : 0]
         config.switcherHoldToCycle = switcherHoldCheck.state == .on
         config.switcherCaptureCmdTab = switcherCmdTabCheck.state == .on
-        config.spacesViewFocusDestination = spacesFocusDestinationCheck.state == .on
-        config.spacesViewWallpaper = spacesWallpaperCheck.state == .on
-        config.spacesViewWallpaperPath = spacesWallpaperPathField.stringValue
-        config.spacesViewWallpaperDarkPath = spacesWallpaperDarkPathField.stringValue
+        config.switcherFollowMove = spacesFocusDestinationCheck.state == .on
+        config.switcherWallpaper = spacesWallpaperCheck.state == .on
+        config.switcherWallpaperPath = spacesWallpaperPathField.stringValue
+        config.switcherWallpaperDarkPath = spacesWallpaperDarkPathField.stringValue
         switcherCmdTabCheck.isEnabled = config.switcherEnabled && config.switcherHoldToCycle
         onChange(config)
         if symbolChanged {

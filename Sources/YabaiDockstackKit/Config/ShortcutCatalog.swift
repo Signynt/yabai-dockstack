@@ -33,9 +33,6 @@ public enum ShortcutCatalog {
         .init("open-window-switcher", "Open window switcher", "General",
               "sh ${SCRIPTS}/openWindowSwitcher.sh", nil,
               symbol: "rectangle.stack"),
-        .init("open-spaces-view", "Open Spaces View", "General",
-              "sh ${SCRIPTS}/openSpacesView.sh", nil,
-              symbol: "square.grid.2x2"),
 
         // Shared (floating + tiling)
         .init("toggle-float-center", "Float / unfloat & center", "Shared",

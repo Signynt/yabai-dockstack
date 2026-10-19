@@ -1168,6 +1168,18 @@ do {
     check(calls(l3).range(of: #"--space \d"#, options: .regularExpression) == nil, "space swap does nothing without the SA")
 }
 
+print("Spaces switcher: config")
+do {
+    let d = AppConfig.defaults
+    check(!d.switcherFollowMove && !d.switcherWallpaper && d.switcherWallpaperPath == "" && d.switcherWallpaperDarkPath == "",
+          "follow-move / wallpaper default off")
+    let legacy = AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8))
+    check(!legacy.switcherFollowMove && !legacy.switcherWallpaper && legacy.switcherWallpaperPath == "",
+          "a config without the keys loads the defaults")
+    let set = AppConfig.load(from: #"{"switcherFollowMove":true,"switcherWallpaperPath":"/tmp/w.heic"}"#.data(using: .utf8))
+    check(set.switcherFollowMove && set.switcherWallpaperPath == "/tmp/w.heic", "follow-move / wallpaper keys load")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

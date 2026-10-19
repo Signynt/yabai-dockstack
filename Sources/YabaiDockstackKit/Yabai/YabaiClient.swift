@@ -100,17 +100,6 @@ public final class YabaiClient {
         return DisplayInfo.decodeList(data)
     }
 
-    /// Move a space to the adjacent position on its current display.
-    public func moveSpace(id: Int, forward: Bool) {
-        _ = run(["-m", "space", String(id), "--move", forward ? "next" : "prev"])
-    }
-
-    /// Move a space to another display. yabai places it at the destination
-    /// display's trailing edge; callers can then apply adjacent moves.
-    public func moveSpace(id: Int, toDisplay display: Int) {
-        _ = run(["-m", "space", String(id), "--display", String(display)])
-    }
-
     /// The currently focused window, or nil if none / yabai unavailable.
     public func queryFocusedWindow() -> YabaiWindow? {
         guard let data = run(["-m", "query", "--windows", "--window"]),

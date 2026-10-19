@@ -104,11 +104,6 @@ public enum YabaiDockstack {
         // black-hole the system switcher while yabai is down (5s heal re-checks).
         let switcher = SwitcherController(client: client, cache: thumbCache, config: config,
                                           focuser: focuser)
-        let spacesView = SpacesController(client: client, cache: thumbCache,
-                                           focusDestination: config.spacesViewFocusDestination,
-                                           wallpaperEnabled: config.spacesViewWallpaper,
-                                           wallpaperPath: config.spacesViewWallpaperPath,
-                                           wallpaperDarkPath: config.spacesViewWallpaperDarkPath)
         let switcherTap = SwitcherKeyTap()
         switcher.onDismiss = { switcherTap.resetMachine() }
         func ensureSwitcherTap() {
@@ -129,9 +124,6 @@ public enum YabaiDockstack {
         let strip = WindowStripController(client: client, focuser: focuser)
         strip.setEnabled(config.windowStrip)
         strip.setScale(config.windowStripScale)
-        coordinator.onSnapshot = { windows, spaces, labels in
-            spacesView.noteSnapshot(windows: windows, spaces: spaces, labels: labels)
-        }
         coordinator.onWindows = { windows in
             switcher.noteWindows(windows)
             strip.update(windows: windows)
@@ -207,16 +199,6 @@ public enum YabaiDockstack {
                 } else if cmd == "show-switcher" {
                     DispatchQueue.main.async {
                         switcher.open(scope: .allWindows, sticky: true)
-                        spacesView.cancel()
-                    }
-                } else if cmd == "show-spaces" {
-                    DispatchQueue.main.async {
-                        if spacesView.isOpen {
-                            spacesView.cancel()
-                            return
-                        }
-                        switcher.cancel()
-                        spacesView.open()
                     }
                 } else {
                     spaceMover.handle(command: cmd)
@@ -272,10 +254,6 @@ public enum YabaiDockstack {
                 coordinator.requestRefresh()
                 ensureDockController()
                 switcher.updateConfig(config)
-                spacesView.updateFocusDestination(config.spacesViewFocusDestination)
-                spacesView.updateWallpaper(config.spacesViewWallpaper,
-                                           path: config.spacesViewWallpaperPath,
-                                           darkPath: config.spacesViewWallpaperDarkPath)
                 ensureSwitcherTap()
                 menu.openOnHover = config.menuOpenOnHover
                 strip.setEnabled(config.windowStrip)
@@ -321,12 +299,8 @@ public enum YabaiDockstack {
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil, queue: .main) { _ in
-                spacesView.refreshActiveSpaces()
                 coordinator.requestRefresh()
             }
-        DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
-            object: nil, queue: .main) { _ in spacesView.refreshWallpaper() }
 
         ensureDockController()
         ensureSwitcherTap()

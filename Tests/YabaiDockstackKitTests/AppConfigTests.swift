@@ -57,10 +57,10 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(c.switcherHotkeyAll, "alt - tab")
         XCTAssertEqual(c.switcherHotkeyApp, "alt - 0x32")
         XCTAssertEqual(c.switcherHotkeySpace, "")
-        XCTAssertFalse(c.spacesViewFocusDestination)
-        XCTAssertFalse(c.spacesViewWallpaper)
-        XCTAssertEqual(c.spacesViewWallpaperPath, "")
-        XCTAssertEqual(c.spacesViewWallpaperDarkPath, "")
+        XCTAssertFalse(c.switcherFollowMove)
+        XCTAssertFalse(c.switcherWallpaper)
+        XCTAssertEqual(c.switcherWallpaperPath, "")
+        XCTAssertEqual(c.switcherWallpaperDarkPath, "")
     }
 
     func testOldConfigWithoutSwitcherFieldsGetsDefaults() {
@@ -70,21 +70,21 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(c.style, .flag)
         XCTAssertTrue(c.switcherEnabled)
         XCTAssertEqual(c.switcherHotkeyAll, "alt - tab")
-        XCTAssertFalse(c.spacesViewFocusDestination)
-        XCTAssertFalse(c.spacesViewWallpaper)
+        XCTAssertFalse(c.switcherFollowMove)
+        XCTAssertFalse(c.switcherWallpaper)
     }
 
-    func testSpacesViewFocusDestinationLoads() {
-        let json = #"{"spacesViewFocusDestination":true}"#.data(using: .utf8)!
-        XCTAssertTrue(AppConfig.load(from: json).spacesViewFocusDestination)
+    func testSwitcherFollowMoveLoads() {
+        let json = #"{"switcherFollowMove":true}"#.data(using: .utf8)!
+        XCTAssertTrue(AppConfig.load(from: json).switcherFollowMove)
     }
 
-    func testSpacesViewWallpaperLoads() {
-        let json = #"{"spacesViewWallpaper":true,"spacesViewWallpaperPath":"/tmp/wallpaper.heic","spacesViewWallpaperDarkPath":"/tmp/dark.heic"}"#.data(using: .utf8)!
+    func testSwitcherWallpaperLoads() {
+        let json = #"{"switcherWallpaper":true,"switcherWallpaperPath":"/tmp/wallpaper.heic","switcherWallpaperDarkPath":"/tmp/dark.heic"}"#.data(using: .utf8)!
         let c = AppConfig.load(from: json)
-        XCTAssertTrue(c.spacesViewWallpaper)
-        XCTAssertEqual(c.spacesViewWallpaperPath, "/tmp/wallpaper.heic")
-        XCTAssertEqual(c.spacesViewWallpaperDarkPath, "/tmp/dark.heic")
+        XCTAssertTrue(c.switcherWallpaper)
+        XCTAssertEqual(c.switcherWallpaperPath, "/tmp/wallpaper.heic")
+        XCTAssertEqual(c.switcherWallpaperDarkPath, "/tmp/dark.heic")
     }
 
     func testMenuHoverDefaultsOff() {
