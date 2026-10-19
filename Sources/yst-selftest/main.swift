@@ -1149,6 +1149,37 @@ check(SpacesInteraction.moveAllowed(from: 1, to: 2, fullscreen: [])
 check(SpacesInteraction.pillFits(CGSize(width: 80, height: 50)) && !SpacesInteraction.pillFits(CGSize(width: 34, height: 19))
       && !SpacesInteraction.pillFits(CGSize(width: 24, height: 40)), "project pill only on tiles big enough for it")
 
+print("Auto padding & restart")
+do {
+    let original = Paddings(left: 30, right: 30, top: 8)
+    check(AutoPadding.target(original: original, cellSize: 32, stripEnabled: true, stripScale: 0.8)
+          == Paddings(left: 34, right: 34, top: 26), "auto padding: indicator + 2, strip height + 6")
+    check(AutoPadding.target(original: original, cellSize: 20, stripEnabled: false, stripScale: 0.8)
+          == Paddings(left: 22, right: 22, top: 8), "auto padding shrinks with the indicator; strip off keeps top")
+    check(AutoPadding.parse("12\n") == 12 && AutoPadding.parse("12.0") == 12 && AutoPadding.parse("unknown key") == nil
+          && AutoPadding.parse(nil) == nil, "yabai config value parsing")
+    check(Relauncher.arguments(bundlePath: "/Applications/Y.app", executablePath: "/Applications/Y.app/Contents/MacOS/y")
+          == ["-c", "sleep 0.5; /usr/bin/open -n '/Applications/Y.app'"]
+          && Relauncher.arguments(bundlePath: "/tmp/build", executablePath: "/tmp/build/y")
+          == ["-c", "sleep 0.5; '/tmp/build/y' >/dev/null 2>&1 &"], "restart relaunches the bundle (or bare binary)")
+    let dir = NSTemporaryDirectory() + "fy-\(UUID().uuidString)"
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    let log = dir + "/log", path = dir + "/yabai"
+    try? "#!/bin/sh\necho \"$*\" >> \(log)\n[ $# -eq 3 ] && echo 10\nexit 0\n".write(toFile: path, atomically: true, encoding: .utf8)
+    try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+    let c = AutoPaddingController(client: YabaiClient(yabaiPath: path))
+    c.update(enabled: true, cellSize: 32, stripEnabled: true, stripScale: 0.8)
+    let applied = (try? String(contentsOfFile: log, encoding: .utf8)) ?? ""
+    check(applied.contains("-m config left_padding 34") && applied.contains("-m config top_padding 26"),
+          "auto padding applied via yabai config")
+    c.update(enabled: false, cellSize: 32, stripEnabled: true, stripScale: 0.8)
+    let restored = (try? String(contentsOfFile: log, encoding: .utf8)) ?? ""
+    check(restored.contains("-m config left_padding 10") && restored.contains("-m config top_padding 10"),
+          "turning it off restores the original values")
+    check(!AppConfig.defaults.autoPadding && !AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).autoPadding,
+          "auto padding defaults off")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

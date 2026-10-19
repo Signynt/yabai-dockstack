@@ -114,6 +114,15 @@ public final class YabaiClient {
         _ = run(["-m", "window", String(id), "--move", "abs:\(Int(absX)):\(Int(absY))"])
     }
 
+    /// `yabai -m config <key>` as an integer (paddings, gaps).
+    public func configInt(_ key: String) -> Int? {
+        AutoPadding.parse(run(["-m", "config", key]).map { String(decoding: $0, as: UTF8.self) })
+    }
+
+    public func setConfig(_ key: String, _ value: Int) {
+        _ = run(["-m", "config", key, String(value)])
+    }
+
     public func balance(space: Int) {
         _ = run(["-m", "space", String(space), "--balance"])
     }

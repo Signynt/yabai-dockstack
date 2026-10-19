@@ -5,6 +5,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     private let menu = NSMenu()
 
     public var onQuit: (() -> Void)?
+    public var onRestart: (() -> Void)?
     public var onOpenSettings: (() -> Void)?
     public var onReregisterSignals: (() -> Void)?
     public var onSelectWindow: ((Int) -> Void)?
@@ -211,6 +212,10 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let restart = NSMenuItem(title: L10n.t("ui.menu.restart"), action: #selector(restartAction), keyEquivalent: "")
+        restart.target = self
+        menu.addItem(restart)
+
         let quit = NSMenuItem(title: L10n.t("ui.menu.quit"), action: #selector(quitAction), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -223,4 +228,5 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     @objc private func yabaiSetupAction() { onOpenYabaiSetup?() }
     @objc private func reregisterAction() { onReregisterSignals?() }
     @objc private func quitAction() { onQuit?() }
+    @objc private func restartAction() { onRestart?() }
 }

@@ -32,6 +32,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let backgroundCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let backgroundWell = NSColorWell()
     private let confineCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let autoPaddingCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let clickThroughCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let dragReorderCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let fullWidthPopup = NSPopUpButton()
@@ -203,6 +204,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         backgroundWell.target = self; backgroundWell.action = #selector(changed)
         backgroundCheck.target = self; backgroundCheck.action = #selector(changed)
         confineCheck.target = self; confineCheck.action = #selector(changed)
+        autoPaddingCheck.target = self; autoPaddingCheck.action = #selector(changed)
         clickThroughCheck.target = self; clickThroughCheck.action = #selector(changed)
         dragReorderCheck.target = self; dragReorderCheck.action = #selector(changed)
         dockPreviewCheck.target = self; dockPreviewCheck.action = #selector(changed)
@@ -308,6 +310,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 
         backgroundCheck.title = L10n.t("ui.appearance.showBackground")
         confineCheck.title = L10n.t("ui.appearance.confine")
+        autoPaddingCheck.title = L10n.t("ui.appearance.autoPadding")
         clickThroughCheck.title = L10n.t("ui.appearance.clickThrough")
         dragReorderCheck.title = L10n.t("ui.appearance.dragReorder")
         dockPreviewCheck.title = L10n.t("ui.appearance.dockPreview")
@@ -344,6 +347,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             [NSGridCell.emptyContentView, backgroundCheck],
             row(L10n.t("ui.appearance.backgroundColor"), backgroundWell),
             [NSGridCell.emptyContentView, confineCheck],
+            [NSGridCell.emptyContentView, autoPaddingCheck],
             [NSGridCell.emptyContentView, clickThroughCheck],
             [NSGridCell.emptyContentView, dragReorderCheck],
             [NSGridCell.emptyContentView, dockPreviewCheck],
@@ -579,6 +583,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         backgroundCheck.state = config.showBackground ? .on : .off
         backgroundWell.color = NSColor.fromHex(config.backgroundColor, fallback: NSColor(white: 0, alpha: 0.8))
         confineCheck.state = config.confineToGap ? .on : .off
+        autoPaddingCheck.state = config.autoPadding ? .on : .off
         clickThroughCheck.state = config.indicatorClickThrough ? .on : .off
         dragReorderCheck.state = config.indicatorDragReorder ? .on : .off
         dragReorderCheck.isEnabled = !config.indicatorClickThrough
@@ -628,6 +633,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         config.showBackground = backgroundCheck.state == .on
         config.backgroundColor = backgroundWell.color.hexString
         config.confineToGap = confineCheck.state == .on
+        config.autoPadding = autoPaddingCheck.state == .on
         config.indicatorClickThrough = clickThroughCheck.state == .on
         config.indicatorDragReorder = dragReorderCheck.state == .on
         dragReorderCheck.isEnabled = !config.indicatorClickThrough

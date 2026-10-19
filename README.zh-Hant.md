@@ -196,7 +196,12 @@ space 並聚焦。
   標籤先縮短、再只剩圖示,最後出現 **+N**(點了打開視窗選單)。在 Settings 拖曳
   **視窗列大小** 即可調整尺寸。把 **chip 拖到** 另一個 space 的區段即可移動視窗(拖曳時空的
   space 會展開成放置區)。原生全螢幕 space 會自動隱藏;可能會蓋住視窗頂端——
-  需要的話調高 yabai 的 `top_padding`。
+  可勾選 Settings → Appearance 的 **自動調整 yabai 的 padding**,或自行調高 yabai 的 `top_padding`。
+- **自動調整 padding**(選用,預設關閉):app 執行時把 yabai 的 `left_padding` / `right_padding`
+  設成圖標大小 + 2,視窗列開著時把 `top_padding` 設成視窗列高度 + 6,讓兩者都不會蓋到 App。
+  會跟著圖標大小和視窗列大小變化(圖標變小 padding 也變小),只用 `yabai -m config` 套用,
+  不改 yabairc;取消勾選或結束 app 時還原你原本的值。三欄以上排列時,夾在中間的 stack
+  圖標仍可能壓到隔壁視窗(`window_gap` 不會調整)。
 - **滑鼠停留展開**:游標停在選單列圖示上 ¼ 秒就展開視窗選單。選單也有快捷鍵
   (Settings → Keyboard →「Open window menu」)。
 

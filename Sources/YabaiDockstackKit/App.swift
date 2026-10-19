@@ -172,16 +172,24 @@ public enum YabaiDockstack {
                            includeShift: config.hyperIncludeShift)
         }
         applyHyperKey()
+        // Auto padding: yabai paddings sized for our overlays, runtime only.
+        let autoPadding = AutoPaddingController(client: client)
+        func applyAutoPadding() {
+            autoPadding.update(enabled: config.autoPadding, cellSize: config.cellSize,
+                               stripEnabled: config.windowStrip, stripScale: config.windowStripScale)
+        }
+        applyAutoPadding()
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
             hyperKey.shutdown()
+            autoPadding.restore()
         }
         // SIGTERM/SIGINT skip willTerminate; restore the source key on those too.
         var signalSources: [DispatchSourceSignal] = []
         for sig in [SIGTERM, SIGINT] {
             signal(sig, SIG_IGN)
             let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
-            src.setEventHandler { hyperKey.shutdown(); exit(0) }
+            src.setEventHandler { hyperKey.shutdown(); autoPadding.restore(); exit(0) }
             src.resume()
             signalSources.append(src)
         }
@@ -259,6 +267,7 @@ public enum YabaiDockstack {
                 strip.setEnabled(config.windowStrip)
                 strip.setScale(config.windowStripScale)
                 applyHyperKey()
+                applyAutoPadding()
             },
             onLoginToggle: { enabled in _ = LoginItem.setEnabled(enabled) },
             loginIsEnabled: { LoginItem.isEnabled })
@@ -282,7 +291,12 @@ public enum YabaiDockstack {
         }
 
         yabaiGuide.onSetPath = { settings.show() }
-        menu.onQuit = { listener.stop(); coordinator.stop(); hyperKey.shutdown(); app.terminate(nil) }
+        menu.onQuit = { listener.stop(); coordinator.stop(); hyperKey.shutdown(); autoPadding.restore(); app.terminate(nil) }
+        menu.onRestart = {
+            listener.stop(); coordinator.stop(); hyperKey.shutdown(); autoPadding.restore()
+            Relauncher.schedule()
+            app.terminate(nil)
+        }
         menu.onOpenSettings = { settings.show() }
         menu.onOpenYabaiSetup = { yabaiGuide.show() }
         menu.onReregisterSignals = {
@@ -348,6 +362,7 @@ public enum YabaiDockstack {
             case .keep: break
             }
             guard client.isAvailable() else { return }
+            autoPadding.heal()  // a yabai restart reloads yabairc over our paddings
             if !SignalInstaller.isInstalled(client: client) {
                 installSignals()
                 coordinator.requestRefresh()

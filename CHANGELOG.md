@@ -28,6 +28,10 @@ the [GitHub Releases](https://github.com/z20240/yabai-dockstack/releases) page.
   click to jump, hover for title and space, resizable from Settings, "+N"
   overflow opens the menu; hidden over native-fullscreen spaces.
 - **Hover to open the window menu** (opt-in).
+- **Auto-adjust yabai padding** (opt-in, Settings → Appearance) — sizes yabai's
+  left/right padding for the stack indicators and the top padding for the window
+  strip, live, following their size; restored when turned off or on quit.
+- **Restart yabai-dockstack** from the menu bar menu.
 - **Dock previews match the rest of the app** — same frosted panel as the
   switcher, colours follow light/dark mode (thanks @Signynt, #5).
 - **⌃-drag to reorder a stack** from its indicator (on by default; uses yabai

@@ -234,6 +234,7 @@ falls back to its default. All keys:
   "menuOpenOnHover": false,
   "windowStrip": false,
   "windowStripScale": 0.8,
+  "autoPadding": false,
   "hyperKey": "none",
   "hyperQuickPress": "none",
   "hyperIncludeShift": true,
@@ -267,6 +268,13 @@ falls back to its default. All keys:
 - `menuOpenOnHover`: open the window menu when the pointer rests on the menu
   bar icon. `windowStrip`: show the per-display window strip;
   `windowStripScale`: its size (0.5–1.5, default 0.8).
+- `autoPadding`: while the app runs, set yabai's `left_padding` / `right_padding`
+  to the indicator size + 2 and, with the window strip on, `top_padding` to the
+  strip height + 6, so neither covers apps. It follows the indicator size and
+  strip size (smaller indicators, smaller padding) and is applied with
+  `yabai -m config` only — your yabairc is untouched and your own values come
+  back when you turn it off or quit. Off by default. Windows between two stacks
+  in a 3+ column layout aren't covered (`window_gap` is left alone).
 - `hyper*`: see [Hyper Key](#hyper-key).
 - `switcher*`: the window switcher — `switcherAppearance` (hold-to-cycle only)
   is `"thumbnails"`, `"icons"` or `"titles"`; the three hotkeys use skhd notation
@@ -443,8 +451,8 @@ Both are off by default — turn them on in **Settings → Appearance**.
   strip size** in Settings to resize it. **Drag a chip** onto another space's
   section to move the window there (empty spaces open up as drop slots while
   you drag). It hides over native-fullscreen
-  spaces and may cover the top of windows — raise yabai's `top_padding` if
-  you want it clear.
+  spaces and may cover the top of windows — turn on **Auto-adjust yabai
+  padding** (Settings → Appearance) or raise yabai's `top_padding`.
 - **Hover to open**: rest the pointer on the menu bar icon for ¼ s and the
   window menu opens. The menu also has a hotkey (Settings → Keyboard →
   "Open window menu").

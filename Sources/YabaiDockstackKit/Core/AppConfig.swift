@@ -42,6 +42,9 @@ public struct AppConfig: Codable, Equatable {
     public var windowStrip: Bool
     /// Window strip size multiplier (1 = 24 pt tall).
     public var windowStripScale: Double
+    /// Size yabai's left/right/top padding (at runtime) so indicators and the
+    /// window strip never cover apps; restored when turned off or on quit.
+    public var autoPadding: Bool
     /// Hyper Key source: a `HyperSource` raw value ("none" = off).
     public var hyperKey: String
     /// Tap-alone action: a `HyperQuickPress` raw value.
@@ -91,6 +94,7 @@ public struct AppConfig: Codable, Equatable {
         menuOpenOnHover: false,
         windowStrip: false,
         windowStripScale: 0.8,
+        autoPadding: false,
         hyperKey: "none",
         hyperQuickPress: "none",
         hyperIncludeShift: true,
