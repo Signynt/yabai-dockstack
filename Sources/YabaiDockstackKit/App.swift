@@ -189,6 +189,7 @@ public enum YabaiDockstack {
         let windowSpaceMover = WindowSpaceMover(client: client, spaceMover: spaceMover,
                                                 scriptsDir: ConfigPaths.scriptsDir)
         switcher.onDropToSpace = { id, space in windowSpaceMover.move(windowId: id, toSpace: space) }
+        strip.onDropToSpace = { id, space in windowSpaceMover.move(windowId: id, toSpace: space) }
         let menu = MenuBarController()
         let listener = SignalListener(
             socketPath: config.socketPath,

@@ -48,4 +48,16 @@ final class WindowStripModelTests: XCTestCase {
         let d = #"[{"index":3,"display":2,"is-visible":true,"is-native-fullscreen":true}]"#.data(using: .utf8)!
         XCTAssertEqual(SpaceInfo.decodeList(d).first?.isNativeFullscreen, true)
     }
+
+    func testIncludeEmptyAndDropSpace() {
+        let strips = WindowStripModel.build(windows: windows, spaces: spaces + [SpaceInfo(index: 4, display: 1, isVisible: false)],
+                                            spaceLabels: [:], includeEmpty: true)
+        XCTAssertEqual(strips[0].sections.map(\.space), [1, 2, 4])
+        XCTAssertTrue(strips[0].sections[2].chips.isEmpty)
+        let ranges = [(space: 1, minX: 0.0, maxX: 100.0), (space: 2, minX: 110.0, maxX: 200.0)]
+        XCTAssertEqual(WindowStripModel.dropSpace(x: 150, sections: ranges), 2)
+        XCTAssertEqual(WindowStripModel.dropSpace(x: 104, sections: ranges), 1)   // gap → nearest
+        XCTAssertNil(WindowStripModel.dropSpace(x: 400, sections: ranges))
+        XCTAssertNil(WindowStripModel.dropSpace(x: -30, sections: ranges))
+    }
 }

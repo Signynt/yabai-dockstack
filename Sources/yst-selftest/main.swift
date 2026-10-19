@@ -997,6 +997,21 @@ do {
     check(SwitcherSections.section(at: CGPoint(x: 50, y: 400), layout: l) == nil, "drop outside sections → nil")
 }
 
+print("Drag to space: strip")
+do {
+    let r = YRect(x: 0, y: 0, w: 1, h: 1)
+    let ws = [YabaiWindow(id: 1, pid: 1, app: "A", title: "a", frame: r, display: 1, space: 1, stackIndex: 0, hasFocus: false)]
+    let sp = [SpaceInfo(index: 1, display: 1, isVisible: true), SpaceInfo(index: 2, display: 1, isVisible: false)]
+    check(WindowStripModel.build(windows: ws, spaces: sp, spaceLabels: [:], includeEmpty: true).first?.sections.map(\.space) == [1, 2],
+          "strip lists empty spaces as drop targets")
+    check(WindowStripModel.build(windows: ws, spaces: sp, spaceLabels: [:]).first?.sections.map(\.space) == [1],
+          "strip hides empty spaces by default")
+    let ranges = [(space: 1, minX: 0.0, maxX: 100.0), (space: 2, minX: 110.0, maxX: 200.0)]
+    check(WindowStripModel.dropSpace(x: 150, sections: ranges) == 2, "drop over a section")
+    check(WindowStripModel.dropSpace(x: 104, sections: ranges) == 1, "drop in a divider gap → nearest section")
+    check(WindowStripModel.dropSpace(x: 400, sections: ranges) == nil, "drop beyond the strip → nil")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

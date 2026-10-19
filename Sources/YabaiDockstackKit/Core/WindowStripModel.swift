@@ -49,14 +49,19 @@ public enum WindowStripModel {
 
     /// Displays ascending; per display only spaces that have windows, ascending;
     /// chips ordered by (stackIndex, id).
+    /// `includeEmpty`: also list spaces with no windows (drop targets while dragging).
     public static func build(windows: [YabaiWindow], spaces: [SpaceInfo],
-                             spaceLabels: [Int: String]) -> [DisplayStrip] {
+                             spaceLabels: [Int: String], includeEmpty: Bool = false) -> [DisplayStrip] {
         let keywords = WindowLabeler.keywords(windows)
         let spaceByIndex = Dictionary(spaces.map { ($0.index, $0) }, uniquingKeysWith: { a, _ in a })
         let byDisplay = Dictionary(grouping: windows, by: { $0.display })
-        return byDisplay.keys.sorted().map { display in
+        var displays = Set(byDisplay.keys)
+        if includeEmpty { displays.formUnion(spaces.map(\.display)) }
+        return displays.sorted().map { display in
             let bySpace = Dictionary(grouping: byDisplay[display] ?? [], by: { $0.space })
-            let sections = bySpace.keys.sorted().map { space -> SpaceSection in
+            var spaceIDs = Set(bySpace.keys)
+            if includeEmpty { spaceIDs.formUnion(spaces.filter { $0.display == display }.map(\.index)) }
+            let sections = spaceIDs.sorted().map { space -> SpaceSection in
                 let chips = (bySpace[space] ?? [])
                     .sorted { ($0.stackIndex, $0.id) < ($1.stackIndex, $1.id) }
                     .map { Chip(id: $0.id, pid: $0.pid, app: $0.app, keyword: keywords[$0.id] ?? $0.app,
@@ -68,6 +73,15 @@ public enum WindowStripModel {
             let hidden = spaces.contains { $0.display == display && $0.isVisible && $0.isNativeFullscreen }
             return DisplayStrip(display: display, hidden: hidden, sections: sections)
         }
+    }
+
+    /// The space a chip dropped at `x` lands in: the section under it, the
+    /// nearest one when it falls in a divider gap, nil outside the strip.
+    public static func dropSpace(x: Double, sections: [(space: Int, minX: Double, maxX: Double)]) -> Int? {
+        guard let first = sections.map(\.minX).min(), let last = sections.map(\.maxX).max(),
+              x >= first, x <= last else { return nil }
+        if let hit = sections.first(where: { x >= $0.minX && x <= $0.maxX }) { return hit.space }
+        return sections.min { min(abs(x - $0.minX), abs(x - $0.maxX)) < min(abs(x - $1.minX), abs(x - $1.maxX)) }?.space
     }
 
     public enum Density: Equatable {
