@@ -15,6 +15,12 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     /// True → show a prominent "yabai not found — set up…" item.
     public var yabaiMissing: (() -> Bool)?
     public var onOpenYabaiSetup: (() -> Void)?
+    /// Open the menu when the pointer rests on the status icon (no click).
+    public var openOnHover = false
+    private var hoverTimer: Timer?
+    /// The menu just closed with the pointer still on the icon: don't reopen
+    /// it until the pointer has left once.
+    private var suppressUntilExit = false
 
     public override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -29,6 +35,36 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         menu.delegate = self
         statusItem.menu = menu
         rebuild()
+        if let button = statusItem.button {
+            button.addTrackingArea(NSTrackingArea(
+                rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                owner: self, userInfo: nil))
+        }
+    }
+
+    // MARK: - Hover to open
+
+    // NSTrackingArea messages its owner by selector; this class is no NSResponder.
+    @objc public func mouseEntered(with event: NSEvent) {
+        guard openOnHover, !suppressUntilExit else { return }
+        hoverTimer?.invalidate()
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
+            guard let self, let button = self.statusItem.button, let win = button.window else { return }
+            let rect = win.convertToScreen(button.convert(button.bounds, to: nil))
+            if rect.contains(NSEvent.mouseLocation) { self.openMenu() }
+        }
+    }
+
+    @objc public func mouseExited(with event: NSEvent) {
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        suppressUntilExit = false
+    }
+
+    public func menuDidClose(_ menu: NSMenu) {
+        guard let button = statusItem.button, let win = button.window else { return }
+        let rect = win.convertToScreen(button.convert(button.bounds, to: nil))
+        if rect.contains(NSEvent.mouseLocation) { suppressUntilExit = true }
     }
 
     // Rebuild dynamic contents whenever the menu is about to open.

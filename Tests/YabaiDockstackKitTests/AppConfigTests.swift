@@ -67,4 +67,8 @@ final class AppConfigTests: XCTestCase {
         XCTAssertTrue(c.switcherEnabled)
         XCTAssertEqual(c.switcherHotkeyAll, "alt - tab")
     }
+
+    func testMenuHoverDefaultsOff() {
+        XCTAssertFalse(AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).menuOpenOnHover)
+    }
 }

@@ -828,6 +828,10 @@ do {
     check(reopened.isEmpty, "focus failure for unknown window → nothing")
 }
 
+print("Menu hover")
+check(!AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).menuOpenOnHover,
+      "hover-to-open menu defaults off")
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

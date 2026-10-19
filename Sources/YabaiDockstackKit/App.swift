@@ -179,6 +179,7 @@ public enum YabaiDockstack {
             WindowMenuModel.build(client.queryWindows(), spaceLabels: client.querySpaceLabels())
         }
         menu.onSelectWindow = { id in focusWindow(id) }
+        menu.openOnHover = config.menuOpenOnHover
         menu.permissionWarning = {
             (config.dockPreview && !PermissionsHelper.allGranted)
                 ? L10n.t("ui.menu.grantPerms") : nil
@@ -221,6 +222,7 @@ public enum YabaiDockstack {
                 ensureDockController()
                 switcher.updateConfig(config)
                 ensureSwitcherTap()
+                menu.openOnHover = config.menuOpenOnHover
             },
             onLoginToggle: { enabled in _ = LoginItem.setEnabled(enabled) },
             loginIsEnabled: { LoginItem.isEnabled })

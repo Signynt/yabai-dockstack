@@ -36,6 +36,8 @@ public struct AppConfig: Codable, Equatable {
     /// Show a window-preview popover when hovering a Dock app icon
     /// (needs Accessibility + Screen Recording).
     public var dockPreview: Bool
+    /// Open the menu-bar window menu when the pointer rests on the status icon.
+    public var menuOpenOnHover: Bool
     /// UI language: "auto" (follow system), "en", "zh-Hant", or "ja".
     public var language: String
     /// Master toggle for the AltTab-style window switcher.
@@ -66,6 +68,7 @@ public struct AppConfig: Codable, Equatable {
         indicatorClickThrough: false,
         indicatorDragReorder: true,
         dockPreview: true,
+        menuOpenOnHover: false,
         language: "auto",
         switcherEnabled: true,
         switcherAppearance: "thumbnails",
