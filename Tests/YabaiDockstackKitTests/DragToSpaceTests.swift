@@ -26,6 +26,43 @@ final class DragToSpaceTests: XCTestCase {
         XCTAssertEqual(ShortcutBindings.setting([other], action: "open-window-switcher", hotkey: hk).count, 2)
     }
 
+    /// Fake yabai that logs its arguments; `--focus` exits `focusExit`.
+    private func loggingYabai(focusExit: Int) throws -> (path: String, log: String) {
+        let dir = NSTemporaryDirectory() + "fy-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let log = dir + "/log", path = dir + "/yabai"
+        let script = """
+        #!/bin/sh
+        echo "$*" >> \(log)
+        case "$*" in
+          *"--windows --window"*) echo '{"id":7,"pid":1,"app":"A","frame":{"x":0,"y":0,"w":1,"h":1},"display":1,"space":2,"stack-index":0,"has-focus":true}' ;;
+          *query*--windows*) echo '[{"id":7,"pid":1,"app":"A","frame":{"x":0,"y":0,"w":1,"h":1},"display":1,"space":2,"stack-index":0,"has-focus":false}]' ;;
+          *--focus*) exit \(focusExit) ;;
+        esac
+        """
+        try script.write(toFile: path, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        return (path, log)
+    }
+
+    func testScriptingAdditionPathMovesByIdWithTheAppsYabai() throws {
+        let (path, log) = try loggingYabai(focusExit: 0)
+        let client = YabaiClient(yabaiPath: path)
+        WindowSpaceMover(client: client, spaceMover: SpaceMover(client: client), saAvailable: { true })
+            .moveNow(windowId: 7, toSpace: 3)
+        let calls = try String(contentsOfFile: log, encoding: .utf8)
+        XCTAssertTrue(calls.contains("-m window 7 --space 3"), calls)
+    }
+
+    func testScriptingAdditionPathAbortsWhenFocusFails() throws {
+        let (path, log) = try loggingYabai(focusExit: 1)
+        let client = YabaiClient(yabaiPath: path)
+        WindowSpaceMover(client: client, spaceMover: SpaceMover(client: client), saAvailable: { true })
+            .moveNow(windowId: 7, toSpace: 3)
+        let calls = try String(contentsOfFile: log, encoding: .utf8)
+        XCTAssertFalse(calls.contains("--space"), calls)  // never sends the focused window away
+    }
+
     func testUnfocusableWindowIsNotWalked() throws {
         let path = NSTemporaryDirectory() + "fake-yabai-\(UUID().uuidString)"
         try "#!/bin/sh\ncase \"$*\" in *--focus*) exit 1 ;; esac\n".write(toFile: path, atomically: true, encoding: .utf8)

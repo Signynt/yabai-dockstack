@@ -58,4 +58,17 @@ final class SwitcherSectionsTests: XCTestCase {
         XCTAssertNil(SwitcherSections.section(at: CGPoint(x: 250, y: 160), layout: l))      // gap
         XCTAssertNil(SwitcherSections.section(at: CGPoint(x: 50, y: 400), layout: l))
     }
+
+    func testFullscreenSpacesAreNotDropTargets() {
+        let sp = [SpaceInfo(index: 1, display: 1, isVisible: true),
+                  SpaceInfo(index: 2, display: 1, isVisible: false, isNativeFullscreen: true)]
+        XCTAssertEqual(SwitcherSections.build(items: [], spaces: sp, labels: [:]).map(\.space), [1])
+    }
+
+    func testHiddenScrolledCardsAreNotDropTargets() {
+        let l = layout(maxWidth: 1000)
+        let visible = CGRect(x: 0, y: 0, width: 450, height: 60)
+        XCTAssertEqual(SwitcherSections.section(at: CGPoint(x: 50, y: 40), layout: l, visible: visible), 0)
+        XCTAssertNil(SwitcherSections.section(at: CGPoint(x: 50, y: 100), layout: l, visible: visible))
+    }
 }

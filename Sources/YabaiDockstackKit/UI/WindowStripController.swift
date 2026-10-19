@@ -53,6 +53,7 @@ public final class WindowStripController {
 
     private func removeAll() {
         StripTooltip.hide()
+        dragging = false
         panels.values.forEach { $0.orderOut(nil) }
         panels.removeAll()
         rendered.removeAll()
@@ -64,7 +65,8 @@ public final class WindowStripController {
         guard !dragging else { return }
         let screens = ScreenProvider.screens()
         var live = Set<Int>()
-        for strip in strips where !strip.hidden {
+        // A display with no windows gets no strip (its sections are only empty drop slots).
+        for strip in strips where !strip.hidden && strip.sections.contains(where: { !$0.chips.isEmpty }) {
             guard let frame = displays.first(where: { $0.index == strip.display })?.frame,
                   let screen = screens.first(where: { abs($0.yabaiFrame.x - frame.x) < 1 && abs($0.yabaiFrame.y - frame.y) < 1 }),
                   let ns = NSScreen.screens.first(where: { $0.frame == screen.cocoaFrame }) else { continue }
@@ -263,15 +265,17 @@ private final class StripView: NSView {
             relayout()
             onWidthChange?()
         case .moved:
-            let x = Double(convert(event.locationInWindow, from: nil).x)
-            let target = WindowStripModel.dropSpace(x: x, sections: ranges)
+            let p = convert(event.locationInWindow, from: nil)
+            let target = WindowStripModel.dropSpace(x: Double(p.x), y: Double(p.y),
+                                                    height: Double(bounds.height), sections: ranges)
             for e in entries {
                 e.highlight.layer?.backgroundColor = e.section.space == target && target != space
                     ? NSColor.controlAccentColor.withAlphaComponent(0.45).cgColor : nil
             }
         case .ended:
-            let x = Double(convert(event.locationInWindow, from: nil).x)
-            let target = WindowStripModel.dropSpace(x: x, sections: ranges)
+            let p = convert(event.locationInWindow, from: nil)
+            let target = WindowStripModel.dropSpace(x: Double(p.x), y: Double(p.y),
+                                                    height: Double(bounds.height), sections: ranges)
             expanded = false
             relayout()
             onWidthChange?()

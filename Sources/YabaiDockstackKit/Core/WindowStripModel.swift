@@ -60,7 +60,9 @@ public enum WindowStripModel {
         return displays.sorted().map { display in
             let bySpace = Dictionary(grouping: byDisplay[display] ?? [], by: { $0.space })
             var spaceIDs = Set(bySpace.keys)
-            if includeEmpty { spaceIDs.formUnion(spaces.filter { $0.display == display }.map(\.index)) }
+            if includeEmpty {
+                spaceIDs.formUnion(spaces.filter { $0.display == display && !$0.isNativeFullscreen }.map(\.index))
+            }
             let sections = spaceIDs.sorted().map { space -> SpaceSection in
                 let chips = (bySpace[space] ?? [])
                     .sorted { ($0.stackIndex, $0.id) < ($1.stackIndex, $1.id) }
@@ -82,6 +84,15 @@ public enum WindowStripModel {
               x >= first, x <= last else { return nil }
         if let hit = sections.first(where: { x >= $0.minX && x <= $0.maxX }) { return hit.space }
         return sections.min { min(abs(x - $0.minX), abs(x - $0.maxX)) < min(abs(x - $1.minX), abs(x - $1.maxX)) }?.space
+    }
+
+    /// As above, but a drop well above / below the strip (y outside its height
+    /// plus some slack) is a cancel, not a move.
+    public static func dropSpace(x: Double, y: Double, height: Double,
+                                 sections: [(space: Int, minX: Double, maxX: Double)]) -> Int? {
+        let slack = 12.0
+        guard y >= -slack, y <= height + slack else { return nil }
+        return dropSpace(x: x, sections: sections)
     }
 
     public enum Density: Equatable {

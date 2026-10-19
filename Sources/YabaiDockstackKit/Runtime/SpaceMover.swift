@@ -31,6 +31,10 @@ public final class SpaceMover {
         abs(after.x - before.x) + abs(after.y - before.y) >= 4
     }
 
+    /// Runs `work` on the mover's serial queue, so hotkey moves and drag moves
+    /// never drive simulated gestures at the same time.
+    public func enqueue(_ work: @escaping () -> Void) { queue.async(execute: work) }
+
     /// Wire form: "move-space prev" | "move-space next" | "move-space 4".
     /// Unknown commands are ignored. Returns immediately; work runs serially
     /// off the main thread (the walk blocks for ~0.3 s per step).
@@ -53,12 +57,18 @@ public final class SpaceMover {
         }
         guard focused else { return .focusFailed }
         Thread.sleep(forTimeInterval: 0.2)  // let the space switch settle before grabbing
-        return moveFocusedWindow(to: .index(space))
+        return moveFocusedWindow(to: .index(space), expecting: id)
     }
 
-    private func moveFocusedWindow(to target: SpaceTarget) -> MoveOutcome {
+    /// `expecting`: abort if focus moved to another window meanwhile, rather
+    /// than carrying the wrong window off.
+    private func moveFocusedWindow(to target: SpaceTarget, expecting: Int? = nil) -> MoveOutcome {
         guard let window = client.queryFocusedWindow() else {
             NSLog("yabai-dockstack: move-space aborted, no focused window")
+            return .aborted
+        }
+        if let expecting, window.id != expecting {
+            NSLog("yabai-dockstack: move-space aborted, focus changed before the walk")
             return .aborted
         }
         guard let plan = SpaceTravelPlanner.plan(

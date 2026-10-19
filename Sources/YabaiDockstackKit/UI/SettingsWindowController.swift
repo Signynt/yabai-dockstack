@@ -241,6 +241,13 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             } catch {
                 NSLog("yabai-dockstack: saving the search switcher hotkey failed: \(error)")
             }
+            // The Keyboard tab holds its own copy of the bindings — rebuild it so
+            // a later Apply there doesn't revert this.
+            guard let self else { return }
+            let selected = self.tabView.flatMap { tv in tv.selectedTabViewItem.map { tv.indexOfTabViewItem($0) } } ?? 0
+            self.buildContent()
+            self.tabView?.selectTabViewItem(at: selected)
+            self.syncControls()
         }
 
         for f in [debounceField, pollField] {
@@ -500,6 +507,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         tabView.addTabViewItem(keyboardItem)
         tabView.addTabViewItem(switcherItem)
         tabView.addTabViewItem(hyperItem)
+        tabView.delegate = self
         self.tabView = tabView
 
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
@@ -641,4 +649,13 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     @objc private func grantAX() { onGrantAccessibility?() }
     @objc private func grantSR() { onGrantScreenRecording?() }
+}
+
+extension SettingsWindowController: NSTabViewDelegate {
+    /// The Keyboard tab may have changed the search switcher binding.
+    public func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        guard let engine = configEngine else { return }
+        switcherSearchRecorder.hotkey = engine.loadBindingsOrDefault()
+            .first { $0.actionID == "open-window-switcher" && $0.enabled }?.hotkey
+    }
 }

@@ -30,7 +30,8 @@ public enum SwitcherSections {
     public static func build(items: [SwitcherItem], spaces: [SpaceInfo],
                              labels: [Int: String]) -> [SwitcherSection] {
         let multiDisplay = Set(spaces.map(\.display)).count > 1
-        return spaces.sorted { ($0.display, $0.index) < ($1.display, $1.index) }.map { sp in
+        // Native-fullscreen spaces can't take other windows.
+        return spaces.filter { !$0.isNativeFullscreen }.sorted { ($0.display, $0.index) < ($1.display, $1.index) }.map { sp in
             let label = labels[sp.index] ?? ""
             let base = label.isEmpty ? "Space \(sp.index)" : label
             return SwitcherSection(space: sp.index, display: sp.display,
@@ -81,8 +82,10 @@ public enum SwitcherSections {
             .min { abs(cells[$0].midX - from.midX) < abs(cells[$1].midX - from.midX) }
     }
 
-    /// The space card under `point`, if any.
-    public static func section(at point: CGPoint, layout: SectionLayout) -> Int? {
-        layout.sections.firstIndex { $0.contains(point) }
+    /// The space card under `point`, if any. `visible`: the scrolled-into-view
+    /// part of the cards — a drop outside it doesn't land on a hidden card.
+    public static func section(at point: CGPoint, layout: SectionLayout, visible: CGRect? = nil) -> Int? {
+        if let visible, !visible.contains(point) { return nil }
+        return layout.sections.firstIndex { $0.contains(point) }
     }
 }

@@ -37,6 +37,9 @@ public final class SwitcherController {
     private var spaces: [SpaceInfo] = []
     private var spaceLabels: [Int: String] = [:]
 
+    /// A refresh arrived mid-drag: replacing the cells would break the drag,
+    /// so render once it ends.
+    private var renderPending = false
     /// A window was dropped onto another space's section: (window id, space).
     public var onDropToSpace: ((Int, Int) -> Void)?
 
@@ -60,11 +63,16 @@ public final class SwitcherController {
         }
         panel.onClick = { [weak self] idx in self?.select(idx); self?.commit() }
         panel.onCloseItem = { [weak self] idx in self?.close(index: idx) }
-        panel.onDropToSpace = { [weak self] idx, space in
-            guard let self, self.items.indices.contains(idx) else { return }
-            let id = self.items[idx].id
+        panel.onDropToSpace = { [weak self] id, space in
+            guard let self else { return }
+            self.renderPending = false
             self.hide()  // the SIP-free move needs the real window, not our panel, under the cursor
             self.onDropToSpace?(id, space)
+        }
+        panel.onDragEnded = { [weak self] in
+            guard let self, self.renderPending else { return }
+            self.renderPending = false
+            self.render()
         }
         panel.onKeyEvent = { [weak self] ev in self?.handleStickyKey(ev) ?? false }
         panel.onResignKey = { [weak self] in
@@ -196,6 +204,7 @@ public final class SwitcherController {
     }
 
     private func render() {
+        if panel.isDragging { renderPending = true; return }
         pointerGate = NSEvent.mouseLocation
         panel.show(items: displayItems(),
                    appearance: SwitcherAppearance(rawValue: config.switcherAppearance) ?? .thumbnails,

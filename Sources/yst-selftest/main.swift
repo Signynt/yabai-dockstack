@@ -1012,6 +1012,46 @@ do {
     check(WindowStripModel.dropSpace(x: 400, sections: ranges) == nil, "drop beyond the strip → nil")
 }
 
+print("Drag to space: review fixes")
+do {
+    func loggingYabai(focusExit: Int) -> (String, String) {
+        let dir = NSTemporaryDirectory() + "fy-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let log = dir + "/log", path = dir + "/yabai"
+        let script = """
+        #!/bin/sh
+        echo "$*" >> \(log)
+        case "$*" in
+          *"--windows --window"*) echo '{"id":7,"pid":1,"app":"A","frame":{"x":0,"y":0,"w":1,"h":1},"display":1,"space":2,"stack-index":0,"has-focus":true}' ;;
+          *query*--windows*) echo '[{"id":7,"pid":1,"app":"A","frame":{"x":0,"y":0,"w":1,"h":1},"display":1,"space":2,"stack-index":0,"has-focus":false}]' ;;
+          *--focus*) exit \(focusExit) ;;
+        esac
+        """
+        try? script.write(toFile: path, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        return (path, log)
+    }
+    let (p1, l1) = loggingYabai(focusExit: 0)
+    let c1 = YabaiClient(yabaiPath: p1)
+    WindowSpaceMover(client: c1, spaceMover: SpaceMover(client: c1), saAvailable: { true }).moveNow(windowId: 7, toSpace: 3)
+    check(((try? String(contentsOfFile: l1, encoding: .utf8)) ?? "").contains("-m window 7 --space 3"),
+          "SA path moves by window id with the app's own yabai (no PATH lookup)")
+    let (p2, l2) = loggingYabai(focusExit: 1)
+    let c2 = YabaiClient(yabaiPath: p2)
+    WindowSpaceMover(client: c2, spaceMover: SpaceMover(client: c2), saAvailable: { true }).moveNow(windowId: 7, toSpace: 3)
+    check(!((try? String(contentsOfFile: l2, encoding: .utf8)) ?? "").contains("--space"),
+          "SA path: focus failed → nothing is sent away")
+    let fs = [SpaceInfo(index: 1, display: 1, isVisible: true), SpaceInfo(index: 2, display: 1, isVisible: false, isNativeFullscreen: true)]
+    check(SwitcherSections.build(items: [], spaces: fs, labels: [:]).map(\.space) == [1], "fullscreen spaces aren't switcher drop targets")
+    let wl = SwitcherSections.layout(counts: [3, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
+                                     gap: 10, headerHeight: 20, emptyHeight: 30, maxWidth: 1000)
+    check(SwitcherSections.section(at: CGPoint(x: 50, y: 100), layout: wl, visible: CGRect(x: 0, y: 0, width: 450, height: 60)) == nil,
+          "scrolled-away cards aren't drop targets")
+    let ranges = [(space: 1, minX: 0.0, maxX: 100.0), (space: 2, minX: 110.0, maxX: 200.0)]
+    check(WindowStripModel.dropSpace(x: 150, y: -200, height: 20, sections: ranges) == nil, "strip: drop far below cancels")
+    check(WindowStripModel.dropSpace(x: 150, y: 10, height: 20, sections: ranges) == 2, "strip: drop on the strip lands")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

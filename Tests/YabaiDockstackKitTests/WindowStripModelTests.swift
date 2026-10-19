@@ -60,4 +60,17 @@ final class WindowStripModelTests: XCTestCase {
         XCTAssertNil(WindowStripModel.dropSpace(x: 400, sections: ranges))
         XCTAssertNil(WindowStripModel.dropSpace(x: -30, sections: ranges))
     }
+
+    func testDropOutsideStripHeightCancels() {
+        let ranges = [(space: 1, minX: 0.0, maxX: 100.0), (space: 2, minX: 110.0, maxX: 200.0)]
+        XCTAssertEqual(WindowStripModel.dropSpace(x: 150, y: 10, height: 20, sections: ranges), 2)
+        XCTAssertNil(WindowStripModel.dropSpace(x: 150, y: -200, height: 20, sections: ranges))
+        XCTAssertNil(WindowStripModel.dropSpace(x: 150, y: 60, height: 20, sections: ranges))
+    }
+
+    func testStripSkipsFullscreenEmptySpaces() {
+        let sp = spaces + [SpaceInfo(index: 4, display: 1, isVisible: false, isNativeFullscreen: true)]
+        let strips = WindowStripModel.build(windows: windows, spaces: sp, spaceLabels: [:], includeEmpty: true)
+        XCTAssertFalse(strips[0].sections.map(\.space).contains(4))
+    }
 }

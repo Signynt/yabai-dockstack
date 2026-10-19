@@ -44,6 +44,11 @@ public final class YabaiClient {
         _ = run(["-m", "window", String(windowId), "--swap", String(other)])
     }
 
+    /// Send a window to a space (needs the scripting addition on modern macOS).
+    public func moveToSpace(windowId: Int, space: Int) {
+        _ = run(["-m", "window", String(windowId), "--space", String(space)])
+    }
+
     /// Close a window (AX-based; works without the scripting addition).
     public func close(windowId: Int) {
         _ = run(["-m", "window", String(windowId), "--close"])

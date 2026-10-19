@@ -32,8 +32,13 @@ public final class SwitcherPanel {
     public private(set) var columns = 1
     /// Sectioned (sticky) layout: cell frames for ↑/↓, nil in flat mode.
     public private(set) var cellFrames: [CGRect]?
-    /// A cell was dragged onto another space's section: (item index, space).
+    /// A cell was dragged onto another space's card: (window id, space).
     public var onDropToSpace: ((Int, Int) -> Void)?
+    /// A drag ended without a drop (re-render now if one was deferred).
+    public var onDragEnded: (() -> Void)?
+    public var isDragging: Bool { dragWindowId != nil }
+    private var itemIDs: [Int] = []
+    private var dragWindowId: Int?
 
     private var sectionLayout: SectionLayout?
     private var sectionSpaces: [Int] = []
@@ -65,6 +70,7 @@ public final class SwitcherPanel {
         let headerH: CGFloat = query.isEmpty ? 0 : 32
 
         cells = []
+        itemIDs = items.map { $0.item.id }
         cellFrames = nil
         sectionLayout = nil
         sectionHeaders = []
@@ -297,6 +303,7 @@ public final class SwitcherPanel {
         switch phase {
         case .began:
             dragSource = index
+            dragWindowId = itemIDs.indices.contains(index) ? itemIDs[index] : nil  // by id, not index
             let cell = cells[index]
             if let rep = cell.bitmapImageRepForCachingDisplay(in: cell.bounds) {
                 cell.cacheDisplay(in: cell.bounds, to: rep)
@@ -314,7 +321,7 @@ public final class SwitcherPanel {
             dragGhost?.frame.origin = CGPoint(x: p.x - (dragGhost?.frame.width ?? 0) / 2,
                                               y: p.y - (dragGhost?.frame.height ?? 0) / 2)
             let hovered = SwitcherSections.section(at: body.convert(event.locationInWindow, from: nil),
-                                                   layout: layout)
+                                                   layout: layout, visible: body.visibleRect)
             for (i, h) in sectionHeaders.enumerated() {
                 h.layer?.backgroundColor = i == hovered
                     ? NSColor.controlAccentColor.withAlphaComponent(0.35).cgColor : nil
@@ -322,10 +329,13 @@ public final class SwitcherPanel {
             }
         case .ended:
             let target = SwitcherSections.section(at: body.convert(event.locationInWindow, from: nil),
-                                                  layout: layout)
+                                                  layout: layout, visible: body.visibleRect)
+            let id = dragWindowId
             endDrag()
-            if let target, sectionSpaces.indices.contains(target) {
-                onDropToSpace?(index, sectionSpaces[target])
+            if let target, let id, sectionSpaces.indices.contains(target) {
+                onDropToSpace?(id, sectionSpaces[target])
+            } else {
+                onDragEnded?()
             }
         }
     }
@@ -335,6 +345,7 @@ public final class SwitcherPanel {
         dragGhost = nil
         if let src = dragSource, cells.indices.contains(src) { cells[src].alphaValue = 1 }
         dragSource = nil
+        dragWindowId = nil
         for h in sectionHeaders { h.layer?.backgroundColor = nil; h.textColor = .secondaryLabelColor }
     }
 
