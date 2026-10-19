@@ -40,6 +40,14 @@ public struct AppConfig: Codable, Equatable {
     public var menuOpenOnHover: Bool
     /// Per-display window strip under the menu bar.
     public var windowStrip: Bool
+    /// Hyper Key source: a `HyperSource` raw value ("none" = off).
+    public var hyperKey: String
+    /// Tap-alone action: a `HyperQuickPress` raw value.
+    public var hyperQuickPress: String
+    /// Hyper = ⌃⌥⌘⇧ when true, ⌃⌥⌘ when false.
+    public var hyperIncludeShift: Bool
+    /// Show ⌃⌥⌘⇧ as ✦ in shortcut displays.
+    public var hyperShowSymbol: Bool
     /// UI language: "auto" (follow system), "en", "zh-Hant", or "ja".
     public var language: String
     /// Master toggle for the AltTab-style window switcher.
@@ -72,6 +80,10 @@ public struct AppConfig: Codable, Equatable {
         dockPreview: true,
         menuOpenOnHover: false,
         windowStrip: false,
+        hyperKey: "none",
+        hyperQuickPress: "none",
+        hyperIncludeShift: true,
+        hyperShowSymbol: false,
         language: "auto",
         switcherEnabled: true,
         switcherAppearance: "thumbnails",

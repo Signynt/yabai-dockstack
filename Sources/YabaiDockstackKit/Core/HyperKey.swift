@@ -1,0 +1,92 @@
+import Foundation
+
+/// Physical key turned into the Hyper Key (⌃⌥⌘ + optional ⇧).
+public enum HyperSource: String, CaseIterable {
+    case none, capsLock, rightCommand, rightOption, rightControl
+
+    /// HID usage (page 7) for `hidutil` remapping.
+    public var hidUsage: UInt64? {
+        switch self {
+        case .none: return nil
+        case .capsLock: return 0x700000039
+        case .rightCommand: return 0x7000000E7
+        case .rightOption: return 0x7000000E6
+        case .rightControl: return 0x7000000E4
+        }
+    }
+}
+
+/// What tapping the Hyper Key alone (no other key) does.
+public enum HyperQuickPress: String, CaseIterable {
+    case none, escape, toggleCapsLock  // toggleCapsLock only for `.capsLock`
+}
+
+/// `hidutil` UserKeyMapping handling: the source key is remapped to F18, which
+/// the event tap then turns into the hyper modifiers. Only entries that map to
+/// F18 are ours; anything else the user set up is preserved.
+public enum HyperKeyMapping {
+    public static let f18: UInt64 = 0x70000006D
+    static let srcKey = "HIDKeyboardModifierMappingSrc"
+    static let dstKey = "HIDKeyboardModifierMappingDst"
+
+    /// Parses `hidutil property --get UserKeyMapping` output (OpenStep plist, or "(null)").
+    public static func parse(_ output: String) -> [[String: UInt64]] {
+        guard let data = output.data(using: .utf8),
+              let list = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [[String: Any]]
+        else { return [] }
+        return list.compactMap { entry in
+            guard let src = number(entry[srcKey]), let dst = number(entry[dstKey]) else { return nil }
+            return [srcKey: src, dstKey: dst]
+        }
+    }
+
+    /// `existing` minus our old entry, plus `source → F18` unless `.none`.
+    public static func merged(existing: [[String: UInt64]], source: HyperSource) -> [[String: UInt64]] {
+        var out = existing.filter { $0[dstKey] != f18 }
+        if let usage = source.hidUsage { out.append([srcKey: usage, dstKey: f18]) }
+        return out
+    }
+
+    /// Argument for `hidutil property --set`.
+    public static func hidutilJSON(_ mappings: [[String: UInt64]]) -> String {
+        let obj: [String: Any] = ["UserKeyMapping": mappings]
+        guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]) else { return "{}" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private static func number(_ v: Any?) -> UInt64? {
+        if let n = v as? NSNumber { return n.uint64Value }
+        if let s = v as? String { return UInt64(s) }
+        return nil
+    }
+}
+
+/// Event-tap state machine for the Hyper Key (seen as F18 after remapping).
+public struct HyperKeyReducer: Equatable {
+    public enum Event { case hyperDown, hyperUp, keyDown, keyUp }
+    public enum Action: Equatable { case pass, addHyperFlags, swallow, quickPress }
+
+    public private(set) var held = false
+    /// Another key was pressed while held → releasing is not a quick press.
+    public private(set) var used = false
+
+    public init() {}
+
+    public mutating func handle(_ e: Event) -> Action {
+        switch e {
+        case .hyperDown:
+            if !held { held = true; used = false }  // autorepeat keeps `used`
+            return .swallow
+        case .hyperUp:
+            let quick = held && !used
+            held = false; used = false
+            return quick ? .quickPress : .swallow
+        case .keyDown:
+            guard held else { return .pass }
+            used = true
+            return .addHyperFlags
+        case .keyUp:
+            return held ? .addHyperFlags : .pass
+        }
+    }
+}

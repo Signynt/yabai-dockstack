@@ -861,6 +861,33 @@ do {
 check(!AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).windowStrip,
       "window strip defaults off")
 
+print("HyperKey")
+do {
+    let user: [String: UInt64] = ["HIDKeyboardModifierMappingSrc": 30064771299, "HIDKeyboardModifierMappingDst": 30064771300]
+    let ours: [String: UInt64] = ["HIDKeyboardModifierMappingSrc": 0x700000039, "HIDKeyboardModifierMappingDst": HyperKeyMapping.f18]
+    check(HyperKeyMapping.parse("(null)").isEmpty, "hidutil (null) → no mappings")
+    check(HyperKeyMapping.parse("(\n    {\n    HIDKeyboardModifierMappingDst = 30064771300;\n    HIDKeyboardModifierMappingSrc = 30064771299;\n}\n)") == [user],
+          "hidutil OpenStep output parsed")
+    check(HyperKeyMapping.merged(existing: [user], source: .capsLock) == [user, ours], "merge appends ours, keeps user's")
+    check(HyperKeyMapping.merged(existing: [user, ours], source: .none) == [user], "crash cleanup removes only ours")
+    check(HyperKeyMapping.merged(existing: [ours], source: .rightCommand).count == 1, "source change → no duplicates")
+    check(HyperKeyMapping.hidutilJSON([ours]).contains("\"UserKeyMapping\""), "hidutil JSON shape")
+    var r = HyperKeyReducer()
+    let seq: [(HyperKeyReducer.Event, HyperKeyReducer.Action)] = [
+        (.hyperDown, .swallow), (.hyperDown, .swallow), (.keyDown, .addHyperFlags), (.hyperDown, .swallow),
+        (.keyUp, .addHyperFlags), (.hyperUp, .swallow), (.hyperDown, .swallow), (.hyperUp, .quickPress), (.keyDown, .pass)]
+    check(seq.allSatisfy { r.handle($0.0) == $0.1 }, "reducer: chord vs quick press, autorepeat-safe")
+    check(Hotkey.parse("hyper - h")?.mods == [.ctrl, .shift, .alt, .cmd], "parse hyper")
+    check(Hotkey.parse("meh - h")?.mods == [.ctrl, .shift, .alt], "parse meh")
+    Hotkey.showHyperSymbol = true
+    check(Hotkey(mods: [.ctrl, .shift, .alt, .cmd], key: "h").displayString == "✦H", "hyper shown as ✦")
+    Hotkey.showHyperSymbol = false
+    check(Hotkey(mods: [.ctrl, .shift, .alt, .cmd], key: "h").displayString == "⌃⇧⌥⌘H", "hyper glyphs by default")
+    let c = AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8))
+    check(c.hyperKey == "none" && c.hyperQuickPress == "none" && c.hyperIncludeShift && !c.hyperShowSymbol,
+          "hyper defaults (off, shift on)")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }
