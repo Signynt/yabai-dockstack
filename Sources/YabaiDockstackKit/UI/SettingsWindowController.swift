@@ -58,6 +58,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let switcherAppearancePopup = NSPopUpButton()
     private let switcherHoldCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let switcherCmdTabCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let switcherSearchHelp = NSTextField(labelWithString: "")
     private let switcherAllRecorder = RecordHotkeyControl(frame: .zero)
     private let switcherAppRecorder = RecordHotkeyControl(frame: .zero)
     private let switcherSpaceRecorder = RecordHotkeyControl(frame: .zero)
@@ -279,11 +280,20 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         windowStripCheck.title = L10n.t("ui.appearance.windowStrip")
         windowStripHelp.stringValue = L10n.t("ui.appearance.windowStripHelp")
         // Surface the existing open-menu hotkey so it's discoverable.
-        let menuKey = configEngine?.loadBindingsOrDefault()
-            .first { $0.actionID == "open-window-menu" && $0.enabled }?.hotkey
-        menuHoverHelp.stringValue = menuKey.map {
+        let bindings = configEngine?.loadBindingsOrDefault() ?? []
+        func boundKey(_ action: String) -> Hotkey? {
+            bindings.first { $0.actionID == action && $0.enabled }?.hotkey
+        }
+        menuHoverHelp.stringValue = boundKey("open-window-menu").map {
             String(format: L10n.t("ui.appearance.menuHoverHelp"), $0.displayString)
         } ?? ""
+        // The search switcher is bound in the Keyboard tab (skhd), not here —
+        // show its key so the Switcher tab doesn't look unbound.
+        let searchKey = boundKey("open-window-switcher")
+        switcherSearchHelp.stringValue = searchKey.map {
+            String(format: L10n.t("ui.switcher.searchHotkey"), $0.displayString)
+        } ?? ""
+        switcherSearchHelp.isHidden = searchKey == nil
         loginCheck.title = L10n.t("ui.appearance.login")
 
         yabaiPathField.placeholderString = L10n.t("ui.appearance.autoDetect")
@@ -414,7 +424,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         switcherGrid.setContentHuggingPriority(.required, for: .horizontal)
         switcherHint.textColor = .secondaryLabelColor
 
-        let switcherStack = NSStackView(views: [switcherGrid, switcherHint])
+        switcherSearchHelp.font = .systemFont(ofSize: 12)
+        let switcherStack = NSStackView(views: [switcherGrid, switcherSearchHelp, switcherHint])
         switcherStack.orientation = .vertical
         switcherStack.alignment = .leading
         switcherStack.spacing = 14
