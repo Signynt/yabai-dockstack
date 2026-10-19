@@ -28,6 +28,12 @@ public final class YabaiClient {
         _ = run(["-m", "window", "--focus", String(windowId)])
     }
 
+    /// Swap two windows' positions (AX-based; also reorders windows inside a
+    /// stack, and works without the scripting addition).
+    public func swap(windowId: Int, with other: Int) {
+        _ = run(["-m", "window", String(windowId), "--swap", String(other)])
+    }
+
     /// Close a window (AX-based; works without the scripting addition).
     public func close(windowId: Int) {
         _ = run(["-m", "window", String(windowId), "--close"])

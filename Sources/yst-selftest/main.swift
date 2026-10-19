@@ -784,6 +784,22 @@ do {
           "menu entries carry keywords")
 }
 
+print("StackReorderPlanner")
+do {
+    check(StackReorderPlanner.swaps(ids: [1, 2, 3, 4], from: 0, to: 2) == [SwapStep(a: 1, b: 2), SwapStep(a: 1, b: 3)],
+          "move down = adjacent swaps")
+    check(StackReorderPlanner.swaps(ids: [1, 2, 3, 4], from: 3, to: 1) == [SwapStep(a: 4, b: 3), SwapStep(a: 4, b: 2)],
+          "move up = adjacent swaps")
+    check(StackReorderPlanner.swaps(ids: [1, 2, 3], from: 1, to: 1).isEmpty, "same index → no swaps")
+    check(StackReorderPlanner.swaps(ids: [1, 2, 3], from: 5, to: 0).isEmpty, "from out of range → no swaps")
+    check(StackReorderPlanner.swaps(ids: [1, 2, 3], from: 0, to: 3).isEmpty, "to out of range → no swaps")
+    check(StackReorderPlanner.dropIndex(offsetFromTop: 70, cell: 32, count: 3) == 2, "drop index from offset")
+    check(StackReorderPlanner.dropIndex(offsetFromTop: -5, cell: 32, count: 3) == 0, "drop index clamps low")
+    check(StackReorderPlanner.dropIndex(offsetFromTop: 500, cell: 32, count: 3) == 2, "drop index clamps high")
+    check(AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).indicatorDragReorder,
+          "drag reorder defaults on")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

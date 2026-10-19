@@ -4,6 +4,7 @@ public final class OverlayRenderer {
     private var config: AppConfig
     private var panels: [String: IndicatorPanel] = [:]
     public var onClickWindow: ((Int) -> Void)?
+    public var onReorder: ((_ stackIds: [Int], _ from: Int, _ to: Int) -> Void)?
 
     public init(config: AppConfig) { self.config = config }
 
@@ -47,6 +48,9 @@ public final class OverlayRenderer {
             } else {
                 let panel = IndicatorPanel(stack: stack, config: config, frame: cocoa)
                 panel.indicatorView.onClickWindow = { [weak self] id in self?.onClickWindow?(id) }
+                panel.indicatorView.onReorder = { [weak self] ids, from, to in
+                    self?.onReorder?(ids, from, to)
+                }
                 panel.orderFrontRegardless()
                 panels[stack.key] = panel
             }

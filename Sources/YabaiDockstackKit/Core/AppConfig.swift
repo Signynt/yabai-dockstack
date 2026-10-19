@@ -31,6 +31,8 @@ public struct AppConfig: Codable, Equatable {
     /// Make the stack indicator non-interactive: clicks pass through to the
     /// window underneath, and there are no hover tooltips or click-to-focus.
     public var indicatorClickThrough: Bool
+    /// ⌃-drag an indicator cell to reorder the windows of its yabai stack.
+    public var indicatorDragReorder: Bool
     /// Show a window-preview popover when hovering a Dock app icon
     /// (needs Accessibility + Screen Recording).
     public var dockPreview: Bool
@@ -62,6 +64,7 @@ public struct AppConfig: Codable, Equatable {
         backgroundColor: "#1E1E1ECC",
         confineToGap: true,
         indicatorClickThrough: false,
+        indicatorDragReorder: true,
         dockPreview: true,
         language: "auto",
         switcherEnabled: true,

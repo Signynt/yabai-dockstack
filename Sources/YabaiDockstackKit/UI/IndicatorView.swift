@@ -2,7 +2,11 @@ import AppKit
 
 public final class IndicatorView: NSView {
     public var stack: Stack {
-        didSet { needsDisplay = true; updateTrackingAreas() }
+        didSet {
+            // A refresh that changes the stack's windows invalidates a drag in flight.
+            if drag != nil, stack.windows.map(\.id) != oldValue.windows.map(\.id) { cancelDrag() }
+            needsDisplay = true; updateTrackingAreas()
+        }
     }
     public var config: AppConfig {
         didSet {
@@ -14,6 +18,17 @@ public final class IndicatorView: NSView {
         }
     }
     public var onClickWindow: ((Int) -> Void)?
+    /// ⌃-drag finished: the stack's window ids (top→bottom), source and target index.
+    public var onReorder: ((_ stackIds: [Int], _ from: Int, _ to: Int) -> Void)?
+
+    private struct Drag {
+        let from: Int
+        let windowId: Int
+        var to: Int
+        var cursorY: CGFloat
+    }
+    private var drag: Drag?
+    private var escMonitor: Any?
 
     public init(stack: Stack, config: AppConfig) {
         self.stack = stack
@@ -62,7 +77,8 @@ public final class IndicatorView: NSView {
             // top→bottom: index 0 at top
             let y = bounds.height - CGFloat(i + 1) * cell
             let rect = NSRect(x: 0, y: y, width: cell, height: cell)
-            let alpha = win.hasFocus ? config.focusedAlpha : config.unfocusedAlpha
+            var alpha = win.hasFocus ? config.focusedAlpha : config.unfocusedAlpha
+            if drag?.from == i { alpha *= 0.25 }  // leave a ghost where the dragged cell was
             switch config.style {
             case .icon:
                 let inset = cell * 0.12
@@ -83,6 +99,22 @@ public final class IndicatorView: NSView {
                 path.fill()
             }
         }
+        if let d = drag { drawDrag(d, cell: cell, color: flagColor) }
+    }
+
+    /// Insertion line at the drop target plus the dragged icon under the cursor.
+    private func drawDrag(_ d: Drag, cell: CGFloat, color: NSColor) {
+        let lineY = d.to > d.from
+            ? bounds.height - CGFloat(d.to + 1) * cell
+            : bounds.height - CGFloat(d.to) * cell
+        color.setFill()
+        NSRect(x: 2, y: min(max(lineY - 1, 0), bounds.height - 2), width: cell - 4, height: 2).fill()
+        guard d.from < stack.windows.count else { return }
+        let y = min(max(d.cursorY - cell / 2, 0), bounds.height - cell)
+        let inset = cell * 0.12
+        icon(for: stack.windows[d.from]).draw(
+            in: NSRect(x: 0, y: y, width: cell, height: cell).insetBy(dx: inset, dy: inset),
+            from: .zero, operation: .sourceOver, fraction: 0.85)
     }
 
     // MARK: - Hit testing helpers
@@ -157,6 +189,46 @@ public final class IndicatorView: NSView {
 
     public override func mouseDown(with event: NSEvent) {
         guard let i = cellIndexAt(event.locationInWindow) else { return }
+        if event.modifierFlags.contains(.control), config.indicatorDragReorder,
+           stack.windows.count > 1 {
+            hideTooltip()
+            drag = Drag(from: i, windowId: stack.windows[i].id, to: i,
+                        cursorY: convert(event.locationInWindow, from: nil).y)
+            // The panel never becomes key, so watch Esc globally while dragging.
+            escMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] e in
+                if e.keyCode == 53 { DispatchQueue.main.async { self?.cancelDrag() } }
+            }
+            needsDisplay = true
+            return
+        }
         onClickWindow?(stack.windows[i].id)
+    }
+
+    public override func mouseDragged(with event: NSEvent) {
+        guard var d = drag else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        d.cursorY = p.y
+        d.to = StackReorderPlanner.dropIndex(offsetFromTop: Double(bounds.height - p.y),
+                                             cell: Double(bounds.width), count: stack.windows.count)
+        drag = d
+        needsDisplay = true
+    }
+
+    public override func mouseUp(with event: NSEvent) {
+        guard let d = drag else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        cancelDrag()
+        // Released outside the indicator, or the stack changed under us → no-op.
+        guard bounds.contains(p), d.to != d.from,
+              stack.windows.indices.contains(d.from),
+              stack.windows[d.from].id == d.windowId else { return }
+        onReorder?(stack.windows.map(\.id), d.from, d.to)
+    }
+
+    private func cancelDrag() {
+        if let m = escMonitor { NSEvent.removeMonitor(m) }
+        escMonitor = nil
+        drag = nil
+        needsDisplay = true
     }
 }

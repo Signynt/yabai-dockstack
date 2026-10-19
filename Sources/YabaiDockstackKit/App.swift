@@ -137,6 +137,20 @@ public enum YabaiDockstack {
             case .pass, .swallow: break
             }
         }
+        // ⌃-drag on a stack indicator: replay the move as adjacent yabai swaps,
+        // then hand focus back to whichever window had it before.
+        renderer.onReorder = { ids, from, to in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let focused = client.queryFocusedWindow()?.id
+                for step in StackReorderPlanner.swaps(ids: ids, from: from, to: to) {
+                    client.swap(windowId: step.a, with: step.b)
+                }
+                if let focused, client.queryFocusedWindow()?.id != focused {
+                    client.focus(windowId: focused)
+                }
+                coordinator.requestRefresh()
+            }
+        }
         let spaceMover = SpaceMover(client: client)
         let menu = MenuBarController()
         let listener = SignalListener(
