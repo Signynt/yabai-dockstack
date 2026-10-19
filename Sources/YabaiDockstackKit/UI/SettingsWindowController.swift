@@ -408,6 +408,10 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 
         let switcherHint = NSTextField(wrappingLabelWithString: L10n.t("ui.switcher.hint"))
         switcherHint.font = .systemFont(ofSize: 11)
+        // Wrap at a fixed width instead of stretching the grid (labels would
+        // drift right as the window widens).
+        switcherHint.preferredMaxLayoutWidth = 460
+        switcherGrid.setContentHuggingPriority(.required, for: .horizontal)
         switcherHint.textColor = .secondaryLabelColor
 
         let switcherStack = NSStackView(views: [switcherGrid, switcherHint])
@@ -423,7 +427,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             switcherStack.trailingAnchor.constraint(equalTo: switcherPane.trailingAnchor, constant: -20),
             switcherStack.topAnchor.constraint(equalTo: switcherPane.topAnchor, constant: 20),
             switcherStack.bottomAnchor.constraint(lessThanOrEqualTo: switcherPane.bottomAnchor, constant: -20),
-            switcherHint.widthAnchor.constraint(equalTo: switcherGrid.widthAnchor),
+            switcherHint.widthAnchor.constraint(lessThanOrEqualTo: switcherStack.widthAnchor),
         ])
 
         let switcherItem = NSTabViewItem()
@@ -449,6 +453,9 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         let hyperHelp = NSTextField(wrappingLabelWithString: L10n.t("ui.hyper.help"))
         hyperHelp.font = .systemFont(ofSize: 11)
         hyperHelp.textColor = .secondaryLabelColor
+        hyperHelp.preferredMaxLayoutWidth = 460
+        hyperStatus.preferredMaxLayoutWidth = 460
+        hyperGrid.setContentHuggingPriority(.required, for: .horizontal)
         let hyperStack = NSStackView(views: [hyperGrid, hyperHelp, hyperStatus])
         hyperStack.orientation = .vertical
         hyperStack.alignment = .leading
@@ -461,8 +468,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             hyperStack.trailingAnchor.constraint(equalTo: hyperPane.trailingAnchor, constant: -20),
             hyperStack.topAnchor.constraint(equalTo: hyperPane.topAnchor, constant: 20),
             hyperStack.bottomAnchor.constraint(lessThanOrEqualTo: hyperPane.bottomAnchor, constant: -20),
-            hyperHelp.widthAnchor.constraint(equalTo: hyperStack.widthAnchor),
-            hyperStatus.widthAnchor.constraint(equalTo: hyperStack.widthAnchor),
+            hyperHelp.widthAnchor.constraint(lessThanOrEqualTo: hyperStack.widthAnchor),
+            hyperStatus.widthAnchor.constraint(lessThanOrEqualTo: hyperStack.widthAnchor),
         ])
         let hyperItem = NSTabViewItem()
         hyperItem.label = L10n.t("ui.tab.hyper")
@@ -562,6 +569,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         if quick == .toggleCapsLock && hyperSource != .capsLock { quick = .none }
         config.hyperQuickPress = quick.rawValue
         config.hyperIncludeShift = hyperShiftCheck.state == .on
+        let symbolChanged = config.hyperShowSymbol != (hyperSymbolCheck.state == .on)
         config.hyperShowSymbol = hyperSymbolCheck.state == .on
         syncHyperQuickChoices(source: hyperSource)
         hyperQuickPopup.isEnabled = hyperSource != .none
@@ -583,6 +591,13 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         config.switcherCaptureCmdTab = switcherCmdTabCheck.state == .on
         switcherCmdTabCheck.isEnabled = config.switcherEnabled && config.switcherHoldToCycle
         onChange(config)
+        if symbolChanged {
+            // Shortcut recorders render their text once; rebuild so ✦ shows up.
+            let selected = tabView.flatMap { tv in tv.selectedTabViewItem.map { tv.indexOfTabViewItem($0) } } ?? 0
+            buildContent()
+            tabView?.selectTabViewItem(at: selected)
+            syncControls()
+        }
     }
 
     @objc private func loginChanged() {
