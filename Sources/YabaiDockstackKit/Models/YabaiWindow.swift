@@ -14,16 +14,20 @@ public struct YabaiWindow: Equatable {
     public let isFloating: Bool
     /// Sticky windows show on every space but yabai reports a single `space`.
     public let isSticky: Bool
+    /// Non-empty when yabai has assigned the window to a scratchpad.
+    public let scratchpad: String?
 
     public init(id: Int, pid: Int, app: String, title: String, frame: YRect,
                 display: Int, space: Int, stackIndex: Int, hasFocus: Bool,
-                isVisible: Bool = true, isFloating: Bool = false, isSticky: Bool = false) {
+                isVisible: Bool = true, isFloating: Bool = false, isSticky: Bool = false,
+                scratchpad: String? = nil) {
         self.id = id; self.pid = pid; self.app = app; self.title = title
         self.frame = frame; self.display = display; self.space = space
         self.stackIndex = stackIndex; self.hasFocus = hasFocus
         self.isVisible = isVisible
         self.isFloating = isFloating
         self.isSticky = isSticky
+        self.scratchpad = scratchpad
     }
 
     private struct Raw: Decodable {
@@ -40,6 +44,7 @@ public struct YabaiWindow: Equatable {
         let isVisible: Bool?
         let isFloating: Bool?
         let isSticky: Bool?
+        let scratchpad: String?
         enum CodingKeys: String, CodingKey {
             case id, pid, app, title, frame, display, space
             case stackIndex = "stack-index"
@@ -47,6 +52,7 @@ public struct YabaiWindow: Equatable {
             case isVisible = "is-visible"
             case isFloating = "is-floating"
             case isSticky = "is-sticky"
+            case scratchpad
         }
     }
 
@@ -64,7 +70,7 @@ public struct YabaiWindow: Equatable {
                 display: raw.display, space: raw.space,
                 stackIndex: raw.stackIndex, hasFocus: raw.hasFocus,
                 isVisible: raw.isVisible ?? true, isFloating: raw.isFloating ?? false,
-                isSticky: raw.isSticky ?? false))
+                isSticky: raw.isSticky ?? false, scratchpad: raw.scratchpad))
         }
         return out
     }

@@ -15,7 +15,7 @@ final class ShortcutCatalogTests: XCTestCase {
 
     func testCoreActionsPresent() {
         for id in ["restart-services", "toggle-show-desktop", "close-window",
-                   "focus-left", "stack-west", "send-space-1", "grid-top-left"] {
+                   "open-spaces-view", "focus-left", "stack-west", "send-space-1", "grid-top-left"] {
             XCTAssertNotNil(ShortcutCatalog.action(id: id), "missing \(id)")
         }
     }

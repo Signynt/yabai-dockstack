@@ -8,6 +8,7 @@ public final class SwitcherController {
     private let client: YabaiClient
     private let cache: ThumbnailCache
     private let capturer = ThumbnailCapturer()
+    private let visibilityProbe = WindowVisibilityProbe()
     private let panel = SwitcherPanel()
     private var config: AppConfig
 
@@ -61,20 +62,29 @@ public final class SwitcherController {
 
     public var isOpen: Bool { panel.isVisible }
 
+    private func displayableWindows(_ wins: [YabaiWindow]) -> [YabaiWindow] {
+        let filtered = visibilityProbe.liveWindowIDs(wins).map { ids in
+            wins.filter { ids.contains($0.id) }
+        } ?? wins
+        return SpacesModel.displayableWindows(
+            filtered, hiddenIDs: visibilityProbe.hiddenWindowIDs(filtered))
+    }
+
     /// Refresh feed (any thread): remember the raw list, keep the MRU in sync.
     /// A read taken before our own focus() landed still reports the previous
     /// window as focused — skip those touches for a beat after a commit.
     public func noteWindows(_ wins: [YabaiWindow]) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.lastWindows = wins
-            if let focused = wins.first(where: { $0.hasFocus }) {
+            let displayable = self.displayableWindows(wins)
+            self.lastWindows = displayable
+            if let focused = displayable.first(where: { $0.hasFocus }) {
                 let staleWindow = self.lastCommitAt.map { Date().timeIntervalSince($0) < 1.0 } ?? false
                 if !staleWindow || focused.id == self.lastCommitID {
                     self.mru.touch(focused.id)
                 }
             }
-            self.mru.prune(keeping: Set(wins.map { $0.id }))
+            self.mru.prune(keeping: Set(displayable.map { $0.id }))
         }
     }
 
@@ -89,7 +99,9 @@ public final class SwitcherController {
         self.scope = scope
         self.sticky = sticky
         self.query = ""
-        if lastWindows.isEmpty && sticky { lastWindows = client.queryWindows() }
+        if lastWindows.isEmpty && sticky {
+            lastWindows = displayableWindows(client.queryWindows())
+        }
         rebuildItems()
         if items.isEmpty && !sticky { hide(); return false }
         let firstIsCurrent = items.first.map { $0.id == mru.ids.first || $0.hasFocus } ?? false
@@ -220,7 +232,7 @@ public final class SwitcherController {
         let gen = generation
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let wins = self.client.queryWindows()
+            let wins = self.displayableWindows(self.client.queryWindows())
             DispatchQueue.main.async { self.applyRefresh(wins, generation: gen) }
             Task { [weak self] in
                 guard let self else { return }

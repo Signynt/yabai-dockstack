@@ -99,6 +99,11 @@ public enum YabaiDockstack {
         // The tap is gated on yabai being present so a captured ⌘⇥ can never
         // black-hole the system switcher while yabai is down (5s heal re-checks).
         let switcher = SwitcherController(client: client, cache: thumbCache, config: config)
+        let spacesView = SpacesController(client: client, cache: thumbCache,
+                                           focusDestination: config.spacesViewFocusDestination,
+                                           wallpaperEnabled: config.spacesViewWallpaper,
+                                           wallpaperPath: config.spacesViewWallpaperPath,
+                                           wallpaperDarkPath: config.spacesViewWallpaperDarkPath)
         let switcherTap = SwitcherKeyTap()
         switcher.onDismiss = { switcherTap.resetMachine() }
         func ensureSwitcherTap() {
@@ -117,6 +122,9 @@ public enum YabaiDockstack {
             dockController?.warmCache()
         }
         coordinator.onWindows = { switcher.noteWindows($0) }
+        coordinator.onSnapshot = { windows, spaces, labels in
+            spacesView.noteSnapshot(windows: windows, spaces: spaces, labels: labels)
+        }
         switcherTap.onOutput = { output in
             switch output {
             case let .activate(idx, backward):
@@ -148,6 +156,16 @@ public enum YabaiDockstack {
                 } else if cmd == "show-switcher" {
                     DispatchQueue.main.async {
                         switcher.open(scope: .allWindows, sticky: true)
+                        spacesView.cancel()
+                    }
+                } else if cmd == "show-spaces" {
+                    DispatchQueue.main.async {
+                        if spacesView.isOpen {
+                            spacesView.cancel()
+                            return
+                        }
+                        switcher.cancel()
+                        spacesView.open()
                     }
                 } else {
                     spaceMover.handle(command: cmd)
@@ -201,6 +219,10 @@ public enum YabaiDockstack {
                 coordinator.requestRefresh()
                 ensureDockController()
                 switcher.updateConfig(config)
+                spacesView.updateFocusDestination(config.spacesViewFocusDestination)
+                spacesView.updateWallpaper(config.spacesViewWallpaper,
+                                           path: config.spacesViewWallpaperPath,
+                                           darkPath: config.spacesViewWallpaperDarkPath)
                 ensureSwitcherTap()
             },
             onLoginToggle: { enabled in _ = LoginItem.setEnabled(enabled) },
@@ -236,7 +258,18 @@ public enum YabaiDockstack {
         // observe display changes
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil, queue: .main) { _ in coordinator.requestRefresh() }
+            object: nil, queue: .main) { _ in
+                coordinator.requestRefresh()
+            }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil, queue: .main) { _ in
+                spacesView.refreshActiveSpaces()
+                coordinator.requestRefresh()
+            }
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil, queue: .main) { _ in spacesView.refreshWallpaper() }
 
         ensureDockController()
         ensureSwitcherTap()

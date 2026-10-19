@@ -355,6 +355,23 @@ ordered most-recently-used:
 - **Permissions:** hold-to-cycle uses a global event tap → **Accessibility**.
   Sticky mode via the menu/skhd needs none beyond yabai itself.
 
+## Spaces View
+
+Open **Spaces View** from **Settings → Keyboard** or run
+`sh ~/.config/yabai-dockstack/scripts/openSpacesView.sh`. It shows every space,
+grouped by display, with the windows currently assigned to each space.
+
+- Drag a window preview onto another space to move it there. The current focus is
+  preserved by default; enable **Focus destination after moving a window** in
+  **Settings → Switcher** to focus the destination instead.
+- Drag a space card onto another space to move all of its windows there. This
+  works for any destination, without depending on adjacent-space commands.
+- Space cards show thumbnail-only previews. Visible windows use live or cached
+  thumbnails; hidden-space windows use the last cached thumbnail, or an app icon
+  when no capture is available.
+- Moving windows between spaces requires a working yabai instance. Sticky windows
+  retain their sticky behavior when moved.
+
 ## Dock window previews
 
 Hover a **Dock app icon** to pop up that app's windows across all spaces; click one

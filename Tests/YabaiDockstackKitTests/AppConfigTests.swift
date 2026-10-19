@@ -57,6 +57,10 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(c.switcherHotkeyAll, "alt - tab")
         XCTAssertEqual(c.switcherHotkeyApp, "alt - 0x32")
         XCTAssertEqual(c.switcherHotkeySpace, "")
+        XCTAssertFalse(c.spacesViewFocusDestination)
+        XCTAssertFalse(c.spacesViewWallpaper)
+        XCTAssertEqual(c.spacesViewWallpaperPath, "")
+        XCTAssertEqual(c.spacesViewWallpaperDarkPath, "")
     }
 
     func testOldConfigWithoutSwitcherFieldsGetsDefaults() {
@@ -66,5 +70,20 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(c.style, .flag)
         XCTAssertTrue(c.switcherEnabled)
         XCTAssertEqual(c.switcherHotkeyAll, "alt - tab")
+        XCTAssertFalse(c.spacesViewFocusDestination)
+        XCTAssertFalse(c.spacesViewWallpaper)
+    }
+
+    func testSpacesViewFocusDestinationLoads() {
+        let json = #"{"spacesViewFocusDestination":true}"#.data(using: .utf8)!
+        XCTAssertTrue(AppConfig.load(from: json).spacesViewFocusDestination)
+    }
+
+    func testSpacesViewWallpaperLoads() {
+        let json = #"{"spacesViewWallpaper":true,"spacesViewWallpaperPath":"/tmp/wallpaper.heic","spacesViewWallpaperDarkPath":"/tmp/dark.heic"}"#.data(using: .utf8)!
+        let c = AppConfig.load(from: json)
+        XCTAssertTrue(c.spacesViewWallpaper)
+        XCTAssertEqual(c.spacesViewWallpaperPath, "/tmp/wallpaper.heic")
+        XCTAssertEqual(c.spacesViewWallpaperDarkPath, "/tmp/dark.heic")
     }
 }

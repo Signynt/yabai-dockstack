@@ -162,23 +162,24 @@ public final class SwitcherPanel {
             content.addSubview(q)
         }
 
-        let effect = NSVisualEffectView(frame: CGRect(x: 0, y: 0,
-                                                      width: contentSize.width + pad * 2,
-                                                      height: contentSize.height + pad * 2))
+        let shell = RoundedPanelView(frame: CGRect(x: 0, y: 0,
+                               width: contentSize.width + pad * 2,
+                               height: contentSize.height + pad * 2),
+                        radius: 16)
+        let effect = NSVisualEffectView(frame: shell.bounds)
+        effect.autoresizingMask = [.width, .height]
         effect.material = .hudWindow
         effect.blendingMode = .behindWindow
         effect.state = .active
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = 16
-        effect.layer?.masksToBounds = true
         content.setFrameOrigin(CGPoint(x: pad, y: pad))
         effect.addSubview(content)
+        shell.addSubview(effect)
 
         let frame = CGRect(x: vf.midX - effect.frame.width / 2,
                            y: vf.midY - effect.frame.height / 2 + vf.height * 0.05,
                            width: effect.frame.width, height: effect.frame.height)
         p.setFrame(frame, display: true)
-        p.contentView = effect
+        p.contentView = shell
 
         p.acceptsKeys = keyboardFocus
         if keyboardFocus {
@@ -311,7 +312,8 @@ final class SwitcherCellView: NSView {
 
         // Small app-icon badge over the thumbnail's bottom-left corner.
         if item.thumbnail != nil {
-            let badge = NSImageView(frame: NSRect(x: pad + 2, y: imgView.frame.maxY - 24,
+            let badge = NSImageView(frame: NSRect(x: (frame.width - 22) / 2,
+                                                  y: imgView.frame.maxY - 18,
                                                   width: 22, height: 22))
             badge.image = item.icon
             addSubview(badge)
@@ -355,7 +357,7 @@ final class SwitcherCellView: NSView {
         icon.image = item.icon
         addSubview(icon)
 
-        let space = NSTextField(labelWithString: "S\(item.item.space)")
+        let space = NSTextField(labelWithString: "D\(item.item.space)")
         space.font = .monospacedDigitSystemFont(ofSize: 10, weight: .medium)
         space.textColor = .secondaryLabelColor
         space.sizeToFit()
@@ -380,7 +382,7 @@ final class SwitcherCellView: NSView {
     }
 
     private func addSpaceTag(_ item: SwitcherDisplayItem) {
-        let tag = NSTextField(labelWithString: "S\(item.item.space)")
+        let tag = NSTextField(labelWithString: "D\(item.item.space)")
         tag.font = .monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
         tag.textColor = .white
         tag.wantsLayer = true
