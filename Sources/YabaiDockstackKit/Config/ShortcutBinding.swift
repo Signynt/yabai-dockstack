@@ -19,3 +19,16 @@ public enum ShortcutConflicts {
         return byKey.filter { $0.value.count > 1 }
     }
 }
+
+public enum ShortcutBindings {
+    /// `bindings` with `action` bound to `hotkey` (created if missing); a nil
+    /// hotkey disables the action's binding.
+    public static func setting(_ bindings: [ShortcutBinding], action: String,
+                               hotkey: Hotkey?) -> [ShortcutBinding] {
+        var out = bindings
+        let updated = ShortcutBinding(actionID: action, enabled: hotkey != nil, hotkey: hotkey)
+        if let i = out.firstIndex(where: { $0.actionID == action }) { out[i] = updated }
+        else if hotkey != nil { out.append(updated) }
+        return out
+    }
+}

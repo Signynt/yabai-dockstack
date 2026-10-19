@@ -934,6 +934,23 @@ do {
           == CGRect(x: 1252, y: 1077, width: 36, height: 40), "status icon mirrored onto the laptop display")
 }
 
+print("Drag to space: routing")
+do {
+    check(!SAProbe.available(csrutilOutput: "System Integrity Protection status: enabled."), "SIP fully on → no SA")
+    check(SAProbe.available(csrutilOutput: "System Integrity Protection status: disabled."), "SIP off → SA")
+    check(SAProbe.available(csrutilOutput: "System Integrity Protection status: enabled (Custom Configuration).\n\nConfiguration:\n"),
+          "custom SIP config → SA")
+    check(!SAProbe.available(csrutilOutput: nil), "csrutil failed → assume no SA")
+    check(MoveRouting.decide(windowSpace: 3, target: 3, saAvailable: true) == .noop, "same space → no-op")
+    check(MoveRouting.decide(windowSpace: 2, target: 5, saAvailable: true) == .script, "SA → yabai script")
+    check(MoveRouting.decide(windowSpace: 2, target: 5, saAvailable: false) == .sipFree, "no SA → SIP-free walk")
+    let hk = Hotkey(mods: [.ctrl, .shift, .alt, .cmd], key: "tab")
+    let set = ShortcutBindings.setting([], action: "open-window-switcher", hotkey: hk)
+    check(set == [ShortcutBinding(actionID: "open-window-switcher", enabled: true, hotkey: hk)], "binding created")
+    check(ShortcutBindings.setting(set, action: "open-window-switcher", hotkey: nil).first?.enabled == false,
+          "clearing a binding disables it")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }
