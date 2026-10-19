@@ -58,7 +58,9 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let switcherAppearancePopup = NSPopUpButton()
     private let switcherHoldCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let switcherCmdTabCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
-    private let switcherSearchHelp = NSTextField(labelWithString: "")
+    /// The search switcher's skhd binding (catalog action open-window-switcher),
+    /// the same one the Keyboard tab edits.
+    private let switcherSearchRecorder = RecordHotkeyControl(frame: .zero)
     private let switcherAllRecorder = RecordHotkeyControl(frame: .zero)
     private let switcherAppRecorder = RecordHotkeyControl(frame: .zero)
     private let switcherSpaceRecorder = RecordHotkeyControl(frame: .zero)
@@ -229,6 +231,17 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         wireRecorder(switcherAllRecorder, \.switcherHotkeyAll)
         wireRecorder(switcherAppRecorder, \.switcherHotkeyApp)
         wireRecorder(switcherSpaceRecorder, \.switcherHotkeySpace)
+        switcherSearchRecorder.onChange = { [weak self] hk in
+            guard let engine = self?.configEngine else { return }
+            let bindings = ShortcutBindings.setting(engine.loadBindingsOrDefault(),
+                                                    action: "open-window-switcher", hotkey: hk)
+            do {
+                try engine.saveSkhd(bindings)
+                _ = engine.applySkhd()
+            } catch {
+                NSLog("yabai-dockstack: saving the search switcher hotkey failed: \(error)")
+            }
+        }
 
         for f in [debounceField, pollField] {
             f.alignment = .right
@@ -287,13 +300,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         menuHoverHelp.stringValue = boundKey("open-window-menu").map {
             String(format: L10n.t("ui.appearance.menuHoverHelp"), $0.displayString)
         } ?? ""
-        // The search switcher is bound in the Keyboard tab (skhd), not here —
-        // show its key so the Switcher tab doesn't look unbound.
-        let searchKey = boundKey("open-window-switcher")
-        switcherSearchHelp.stringValue = searchKey.map {
-            String(format: L10n.t("ui.switcher.searchHotkey"), $0.displayString)
-        } ?? ""
-        switcherSearchHelp.isHidden = searchKey == nil
+        switcherSearchRecorder.hotkey = boundKey("open-window-switcher")
         loginCheck.title = L10n.t("ui.appearance.login")
 
         yabaiPathField.placeholderString = L10n.t("ui.appearance.autoDetect")
@@ -408,6 +415,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             row(L10n.t("ui.switcher.hotkeyAll"), switcherAllRecorder),
             row(L10n.t("ui.switcher.hotkeyApp"), switcherAppRecorder),
             row(L10n.t("ui.switcher.hotkeySpace"), switcherSpaceRecorder),
+            row(L10n.t("ui.switcher.hotkeySearch"), switcherSearchRecorder),
             [NSGridCell.emptyContentView, switcherCmdTabCheck],
         ])
         switcherGrid.translatesAutoresizingMaskIntoConstraints = false
@@ -424,8 +432,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         switcherGrid.setContentHuggingPriority(.required, for: .horizontal)
         switcherHint.textColor = .secondaryLabelColor
 
-        switcherSearchHelp.font = .systemFont(ofSize: 12)
-        let switcherStack = NSStackView(views: [switcherGrid, switcherSearchHelp, switcherHint])
+        let switcherStack = NSStackView(views: [switcherGrid, switcherHint])
         switcherStack.orientation = .vertical
         switcherStack.alignment = .leading
         switcherStack.spacing = 14
