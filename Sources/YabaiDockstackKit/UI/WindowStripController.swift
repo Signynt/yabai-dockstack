@@ -47,6 +47,7 @@ public final class WindowStripController {
     }
 
     private func removeAll() {
+        StripTooltip.hide()
         panels.values.forEach { $0.orderOut(nil) }
         panels.removeAll()
         rendered.removeAll()
@@ -86,6 +87,7 @@ public final class WindowStripController {
             panel.orderFrontRegardless()
         }
         for (display, panel) in panels where !live.contains(display) {
+            panel.contentView = nil  // detaches chips → their tooltip is dropped
             panel.orderOut(nil)
             panels.removeValue(forKey: display)
             rendered.removeValue(forKey: display)
@@ -177,7 +179,6 @@ private final class StripChip: NSView {
     private let chip: WindowStripModel.Chip
     private let section: WindowStripModel.SpaceSection
     private let onClick: (Int) -> Void
-    private var tooltip: NSPanel?
 
     private static func font(_ k: CGFloat) -> NSFont { .systemFont(ofSize: 11 * k) }
 
@@ -236,24 +237,36 @@ private final class StripChip: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         layer?.backgroundColor = NSColor.white.withAlphaComponent(0.15).cgColor
-        showTooltip()
+        let title = chip.title.isEmpty ? chip.app : "\(chip.app) — \(chip.title)"
+        StripTooltip.show("\(title)\nSpace \(section.name)", below: self)
     }
     override func mouseExited(with event: NSEvent) {
         layer?.backgroundColor = nil
-        tooltip?.orderOut(nil)
-        tooltip = nil
+        StripTooltip.hide(owner: self)
     }
     override func mouseDown(with event: NSEvent) {
-        tooltip?.orderOut(nil)
-        tooltip = nil
+        StripTooltip.hide(owner: self)
         onClick(chip.id)
     }
+    /// A refresh replaces the chips under a resting pointer: no mouseExited
+    /// will ever come, so drop the tooltip when the chip leaves its window.
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil { StripTooltip.hide(owner: self) }
+    }
+}
 
-    /// Custom tooltip: system tooltips don't show for an inactive accessory app.
-    private func showTooltip() {
-        guard let win = window else { return }
-        let title = chip.title.isEmpty ? chip.app : "\(chip.app) — \(chip.title)"
-        let label = NSTextField(labelWithString: "\(title)\nSpace \(section.name)")
+/// The strip's single tooltip (system tooltips don't show for an inactive
+/// accessory app). One shared panel, so a missed mouseExited can't stack up
+/// tooltips that never go away.
+enum StripTooltip {
+    private static var panel: NSPanel?
+    private static weak var owner: NSView?
+
+    static func show(_ text: String, below view: NSView) {
+        hide()
+        guard let win = view.window else { return }
+        let label = NSTextField(labelWithString: text)
         label.font = .systemFont(ofSize: 12)
         label.textColor = .white
         label.maximumNumberOfLines = 2
@@ -266,14 +279,24 @@ private final class StripChip: NSView {
         p.backgroundColor = NSColor.black.withAlphaComponent(0.85)
         p.isOpaque = false
         p.hasShadow = true
+        p.ignoresMouseEvents = true
         label.frame = NSRect(x: pad, y: pad, width: size.width - pad * 2, height: label.frame.height)
         p.contentView?.addSubview(label)
-        let origin = win.convertPoint(toScreen: convert(NSPoint(x: 0, y: 0), to: nil))
+        let origin = win.convertPoint(toScreen: view.convert(NSPoint(x: 0, y: 0), to: nil))
         var x = origin.x
         if let screen = win.screen { x = min(x, screen.visibleFrame.maxX - size.width - 4) }
         p.setFrameOrigin(NSPoint(x: x, y: origin.y - size.height - 6))
         p.orderFrontRegardless()
-        tooltip = p
+        panel = p
+        owner = view
+    }
+
+    /// `owner`: only hide if that view is the one showing it (nil = always).
+    static func hide(owner who: NSView? = nil) {
+        if let who, owner !== who { return }
+        panel?.orderOut(nil)
+        panel = nil
+        owner = nil
     }
 }
 

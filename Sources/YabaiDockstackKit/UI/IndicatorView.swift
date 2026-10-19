@@ -180,6 +180,13 @@ public final class IndicatorView: NSView {
         tooltip = panel
     }
 
+    /// Panel about to be removed (stack gone) under a resting pointer: no
+    /// mouseExited will come, so don't leave the tooltip or a drag behind.
+    public func prepareForRemoval() {
+        hideTooltip()
+        if drag != nil { cancelDrag() }
+    }
+
     private func hideTooltip() {
         tooltip?.orderOut(nil)
         tooltip = nil

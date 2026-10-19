@@ -58,6 +58,7 @@ public final class OverlayRenderer {
 
         // remove stale panels
         for (key, panel) in panels where !liveKeys.contains(key) {
+            panel.indicatorView.prepareForRemoval()
             panel.orderOut(nil)
             panels.removeValue(forKey: key)
         }
