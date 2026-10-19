@@ -62,9 +62,20 @@ public enum HyperKeyMapping {
 }
 
 /// Event-tap state machine for the Hyper Key (seen as F18 after remapping).
+/// The modifiers are really pressed on the first hyper down and released on
+/// hyper up: only OR-ing flags onto key events at the HID level leaves the
+/// system believing ⌃⌥⌘⇧ are still held afterwards (stuck modifiers).
 public struct HyperKeyReducer: Equatable {
     public enum Event { case hyperDown, hyperUp, keyDown, keyUp }
-    public enum Action: Equatable { case pass, addHyperFlags, swallow, quickPress }
+    public enum Action: Equatable {
+        case pass, addHyperFlags, swallow
+        /// Swallow the hyper key and post modifier key-downs.
+        case pressModifiers
+        /// Swallow the hyper key and post modifier key-ups.
+        case releaseModifiers
+        /// Release the modifiers, then perform the quick-press action.
+        case quickPress
+    }
 
     public private(set) var held = false
     /// Another key was pressed while held → releasing is not a quick press.
@@ -75,12 +86,14 @@ public struct HyperKeyReducer: Equatable {
     public mutating func handle(_ e: Event) -> Action {
         switch e {
         case .hyperDown:
-            if !held { held = true; used = false }  // autorepeat keeps `used`
-            return .swallow
+            guard !held else { return .swallow }  // autorepeat keeps `used`
+            held = true; used = false
+            return .pressModifiers
         case .hyperUp:
-            let quick = held && !used
+            guard held else { return .swallow }
+            let quick = !used
             held = false; used = false
-            return quick ? .quickPress : .swallow
+            return quick ? .quickPress : .releaseModifiers
         case .keyDown:
             guard held else { return .pass }
             used = true

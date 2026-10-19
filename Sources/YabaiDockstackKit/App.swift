@@ -175,6 +175,15 @@ public enum YabaiDockstack {
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
             hyperKey.shutdown()
         }
+        // SIGTERM/SIGINT skip willTerminate; restore the source key on those too.
+        var signalSources: [DispatchSourceSignal] = []
+        for sig in [SIGTERM, SIGINT] {
+            signal(sig, SIG_IGN)
+            let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            src.setEventHandler { hyperKey.shutdown(); exit(0) }
+            src.resume()
+            signalSources.append(src)
+        }
         let spaceMover = SpaceMover(client: client)
         let menu = MenuBarController()
         let listener = SignalListener(
@@ -328,6 +337,7 @@ public enum YabaiDockstack {
         RunLoop.main.add(signalHealth, forMode: .common)
 
         _ = menu  // retain
+        _ = signalSources
         app.run()
     }
 }

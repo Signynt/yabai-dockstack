@@ -874,9 +874,10 @@ do {
     check(HyperKeyMapping.hidutilJSON([ours]).contains("\"UserKeyMapping\""), "hidutil JSON shape")
     var r = HyperKeyReducer()
     let seq: [(HyperKeyReducer.Event, HyperKeyReducer.Action)] = [
-        (.hyperDown, .swallow), (.hyperDown, .swallow), (.keyDown, .addHyperFlags), (.hyperDown, .swallow),
-        (.keyUp, .addHyperFlags), (.hyperUp, .swallow), (.hyperDown, .swallow), (.hyperUp, .quickPress), (.keyDown, .pass)]
-    check(seq.allSatisfy { r.handle($0.0) == $0.1 }, "reducer: chord vs quick press, autorepeat-safe")
+        (.hyperDown, .pressModifiers), (.hyperDown, .swallow), (.keyDown, .addHyperFlags), (.hyperDown, .swallow),
+        (.keyUp, .addHyperFlags), (.hyperUp, .releaseModifiers), (.hyperDown, .pressModifiers), (.hyperUp, .quickPress),
+        (.keyDown, .pass), (.hyperUp, .swallow)]
+    check(seq.allSatisfy { r.handle($0.0) == $0.1 }, "reducer: press/release modifiers once, chord vs quick press, autorepeat-safe")
     check(Hotkey.parse("hyper - h")?.mods == [.ctrl, .shift, .alt, .cmd], "parse hyper")
     check(Hotkey.parse("meh - h")?.mods == [.ctrl, .shift, .alt], "parse meh")
     Hotkey.showHyperSymbol = true

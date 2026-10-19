@@ -4,10 +4,10 @@ import IOKit
 import IOKit.hidsystem
 
 /// Runs the Hyper Key: `hidutil` remaps the chosen source key to F18, and an
-/// HID-level event tap turns "F18 held" into ⌃⌥⌘(⇧) on every other key. The tap
-/// sits at the HID level so it runs before skhd's session tap whatever their
-/// start order. Requires Accessibility; without it the mapping is removed so
-/// the source key is never left dead. Main thread only.
+/// HID-level event tap turns F18 down/up into real ⌃⌥⌘(⇧) presses/releases, so
+/// every app (and skhd) sees a consistent modifier state. Requires
+/// Accessibility; without it the mapping is removed so the source key is never
+/// left dead. Main thread only.
 public final class HyperKeyController {
     private static let f18KeyCode: Int64 = 79
     private static let escKeyCode: CGKeyCode = 53
@@ -17,6 +17,8 @@ public final class HyperKeyController {
     private var runLoopSource: CFRunLoopSource?
     private var quickPress: HyperQuickPress = .none
     private var flags: CGEventFlags = []
+    /// (keycode, flag) of each hyper modifier, in press order.
+    private var modifierKeys: [(CGKeyCode, CGEventFlags)] = []
 
     public init() {}
 
@@ -27,8 +29,9 @@ public final class HyperKeyController {
         let active = source != .none && PermissionsHelper.hasAccessibility()
         setMapping(active ? source : .none)
         self.quickPress = quickPress
-        flags = [.maskControl, .maskAlternate, .maskCommand]
-        if includeShift { flags.insert(.maskShift) }
+        modifierKeys = [(59, .maskControl), (58, .maskAlternate), (55, .maskCommand)]
+        if includeShift { modifierKeys.append((56, .maskShift)) }
+        flags = modifierKeys.reduce(into: CGEventFlags()) { $0.insert($1.1) }
         if active { startTap() } else { stopTap() }
     }
 
@@ -88,6 +91,7 @@ public final class HyperKeyController {
     }
 
     private func stopTap() {
+        releaseIfHeld()
         if let port = tap { CGEvent.tapEnable(tap: port, enable: false) }
         if let src = runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), src, .commonModes) }
         tap = nil
@@ -98,7 +102,7 @@ public final class HyperKeyController {
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let port = tap { CGEvent.tapEnable(tap: port, enable: true) }
-            reducer = HyperKeyReducer()  // the F18 release may have been missed
+            releaseIfHeld()  // the F18 release may have been missed
             return Unmanaged.passUnretained(event)
         }
         let isHyper = event.getIntegerValueField(.keyboardEventKeycode) == Self.f18KeyCode
@@ -118,10 +122,35 @@ public final class HyperKeyController {
             return Unmanaged.passUnretained(event)
         case .swallow:
             return nil
+        case .pressModifiers:
+            postModifiers(down: true)
+            return nil
+        case .releaseModifiers:
+            postModifiers(down: false)
+            return nil
         case .quickPress:
+            postModifiers(down: false)
             DispatchQueue.main.async { [quickPress] in Self.perform(quickPress) }
             return nil
         }
+    }
+
+    /// Real modifier key-downs (cumulative flags) or key-ups (reverse order).
+    private func postModifiers(down: Bool) {
+        let src = CGEventSource(stateID: .hidSystemState)
+        var current: CGEventFlags = down ? [] : flags
+        for (code, flag) in down ? modifierKeys : modifierKeys.reversed() {
+            if down { current.insert(flag) } else { current.remove(flag) }
+            guard let e = CGEvent(keyboardEventSource: src, virtualKey: code, keyDown: down) else { continue }
+            e.type = .flagsChanged
+            e.flags = current
+            e.post(tap: .cghidEventTap)
+        }
+    }
+
+    private func releaseIfHeld() {
+        if reducer.held { postModifiers(down: false) }
+        reducer = HyperKeyReducer()
     }
 
     private static func perform(_ action: HyperQuickPress) {
@@ -129,9 +158,14 @@ public final class HyperKeyController {
         case .none:
             break
         case .escape:
+            // Explicit empty flags: the source state may still report the
+            // just-released hyper modifiers.
             let src = CGEventSource(stateID: .hidSystemState)
-            CGEvent(keyboardEventSource: src, virtualKey: escKeyCode, keyDown: true)?.post(tap: .cghidEventTap)
-            CGEvent(keyboardEventSource: src, virtualKey: escKeyCode, keyDown: false)?.post(tap: .cghidEventTap)
+            for down in [true, false] {
+                guard let e = CGEvent(keyboardEventSource: src, virtualKey: escKeyCode, keyDown: down) else { continue }
+                e.flags = []
+                e.post(tap: .cghidEventTap)
+            }
         case .toggleCapsLock:
             toggleCapsLock()
         }

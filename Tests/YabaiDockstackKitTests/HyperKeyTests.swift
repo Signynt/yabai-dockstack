@@ -21,16 +21,19 @@ final class HyperKeyTests: XCTestCase {
     }
 
     func testReducerChordVersusQuickPress() {
+        // Modifiers are really pressed on the first hyper down and released on
+        // hyper up, so the system's modifier state never gets stuck.
         var r = HyperKeyReducer()
-        XCTAssertEqual(r.handle(.hyperDown), .swallow)
+        XCTAssertEqual(r.handle(.hyperDown), .pressModifiers)
         XCTAssertEqual(r.handle(.hyperDown), .swallow)        // autorepeat
         XCTAssertEqual(r.handle(.keyDown), .addHyperFlags)
         XCTAssertEqual(r.handle(.hyperDown), .swallow)        // autorepeat after chord keeps used
         XCTAssertEqual(r.handle(.keyUp), .addHyperFlags)
-        XCTAssertEqual(r.handle(.hyperUp), .swallow)          // chord → no quick press
-        XCTAssertEqual(r.handle(.hyperDown), .swallow)
-        XCTAssertEqual(r.handle(.hyperUp), .quickPress)       // tap alone
+        XCTAssertEqual(r.handle(.hyperUp), .releaseModifiers) // chord → no quick press
+        XCTAssertEqual(r.handle(.hyperDown), .pressModifiers)
+        XCTAssertEqual(r.handle(.hyperUp), .quickPress)       // tap alone: release, then act
         XCTAssertEqual(r.handle(.keyDown), .pass)             // not held
+        XCTAssertEqual(r.handle(.hyperUp), .swallow)          // stray up while not held
     }
 
     func testHotkeyHyperAndMeh() {

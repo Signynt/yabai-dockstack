@@ -16,8 +16,12 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     public var yabaiMissing: (() -> Bool)?
     public var onOpenYabaiSetup: (() -> Void)?
     /// Open the menu when the pointer rests on the status icon (no click).
-    public var openOnHover = false
+    public var openOnHover = false {
+        didSet { if openOnHover != oldValue { updateHoverMonitors() } }
+    }
     private var hoverTimer: Timer?
+    private var hoverMonitors: [Any] = []
+    private var pointerInside = false
     /// The menu just closed with the pointer still on the icon: don't reopen
     /// it until the pointer has left once.
     private var suppressUntilExit = false
@@ -35,36 +39,51 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         menu.delegate = self
         statusItem.menu = menu
         rebuild()
-        if let button = statusItem.button {
-            button.addTrackingArea(NSTrackingArea(
-                rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-                owner: self, userInfo: nil))
-        }
     }
 
     // MARK: - Hover to open
+    //
+    // A tracking area on the status button never fires (it's added while the
+    // button is still zero-height, and NSStatusBarButton doesn't refresh it), so
+    // watch mouse moves instead — global for other apps' windows, local for ours.
 
-    // NSTrackingArea messages its owner by selector; this class is no NSResponder.
-    @objc public func mouseEntered(with event: NSEvent) {
-        guard openOnHover, !suppressUntilExit else { return }
+    private func updateHoverMonitors() {
+        hoverMonitors.forEach(NSEvent.removeMonitor)
+        hoverMonitors = []
+        pointerChanged(inside: false)
+        guard openOnHover else { return }
+        if let g = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: { [weak self] _ in
+            self?.checkPointer()
+        }) { hoverMonitors.append(g) }
+        if let l = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved, handler: { [weak self] e in
+            self?.checkPointer(); return e
+        }) { hoverMonitors.append(l) }
+    }
+
+    private var buttonScreenRect: NSRect? {
+        guard let button = statusItem.button, let win = button.window else { return nil }
+        return win.convertToScreen(button.convert(button.bounds, to: nil))
+    }
+
+    private func checkPointer() {
+        let inside = buttonScreenRect?.contains(NSEvent.mouseLocation) ?? false
+        if inside != pointerInside { pointerChanged(inside: inside) }
+    }
+
+    private func pointerChanged(inside: Bool) {
+        pointerInside = inside
         hoverTimer?.invalidate()
+        hoverTimer = nil
+        guard inside else { suppressUntilExit = false; return }
+        guard openOnHover, !suppressUntilExit else { return }
         hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
-            guard let self, let button = self.statusItem.button, let win = button.window else { return }
-            let rect = win.convertToScreen(button.convert(button.bounds, to: nil))
-            if rect.contains(NSEvent.mouseLocation) { self.openMenu() }
+            guard let self, self.buttonScreenRect?.contains(NSEvent.mouseLocation) == true else { return }
+            self.openMenu()
         }
     }
 
-    @objc public func mouseExited(with event: NSEvent) {
-        hoverTimer?.invalidate()
-        hoverTimer = nil
-        suppressUntilExit = false
-    }
-
     public func menuDidClose(_ menu: NSMenu) {
-        guard let button = statusItem.button, let win = button.window else { return }
-        let rect = win.convertToScreen(button.convert(button.bounds, to: nil))
-        if rect.contains(NSEvent.mouseLocation) { suppressUntilExit = true }
+        if buttonScreenRect?.contains(NSEvent.mouseLocation) == true { suppressUntilExit = true }
     }
 
     // Rebuild dynamic contents whenever the menu is about to open.
