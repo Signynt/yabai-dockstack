@@ -5,14 +5,19 @@ the [GitHub Releases](https://github.com/z20240/yabai-dockstack/releases) page.
 
 ## v0.3.0 — 2026-10-19
 
-- **Drag windows between spaces** — the search switcher now shows one card per
-  space (empty spaces included), grouped per display with the space you're on
-  marked "Current", and the window strip opens empty spaces as drop
-  slots while dragging; drop a window on another space to move it there, even
-  from a space you're not on. Scripting addition → `yabai -m window --space`;
-  SIP on → focus the window and walk it over with the simulated gesture. You end
-  on the destination space with the window focused. The search switcher's
-  hotkey can now be recorded on the Switcher tab.
+- **Spaces-style search switcher & drag windows between spaces** (based on
+  @Signynt's Spaces View, #4) — the search switcher now shows every space as a
+  mini desktop, grouped by display, with its windows tiled inside, a project-name
+  capsule on each, and the space you're on marked "Current". Typing dims the
+  windows that don't match. Drag a window onto another space to move it there,
+  even from a space you're not on (the window strip takes drops too):
+  - with yabai's scripting addition the move is instant and the switcher stays
+    open (optionally follow the window: Settings → Switcher);
+  - with SIP on the window is focused and walked over with the simulated gesture,
+    and you end on the destination space.
+  Drag a whole space card onto another to **swap their windows** — this needs
+  the scripting addition. Click a card to go to that space. Optional wallpaper on
+  the cards. The search switcher's hotkey can now be recorded on the Switcher tab.
 - **Project-aware window labels** — windows of the same app are labelled by
   what tells them apart: VS Code / Cursor / Windsurf → workspace, JetBrains →
   project, terminals → current folder, otherwise the part of the title that

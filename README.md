@@ -38,10 +38,11 @@ It is a clean Swift rewrite — **not** a fork of stackline (which required Hamm
   VS Code / Cursor show the workspace, JetBrains the project, terminals the
   current folder. Used in the switcher, Dock previews, the window menu and the
   new window strip.
-- **Drag windows between spaces** — from the search switcher (now one card
-  per space, empty spaces included) or the window strip, drop a window on
-  another space to move it there; even from a space you're not on. Uses yabai's
-  scripting addition when present, otherwise works with SIP on.
+- **Spaces-style search switcher** (from @Signynt's Spaces View, #4) — every
+  space as a mini desktop with its windows; drag a window onto another space to
+  move it there, even from a space you're not on (also from the window strip).
+  Uses yabai's scripting addition when present, otherwise works with SIP on.
+  Dragging a whole space to swap windows needs the scripting addition.
 - **Window strip** (opt-in) — a strip under the menu bar on each display lists
   that display's windows with their space; click to jump.
 - **Hover to open** the window menu (opt-in).
@@ -106,7 +107,7 @@ Full history: [CHANGELOG.md](CHANGELOG.md) ·
   (VS Code workspace, JetBrains project, terminal folder) everywhere.
 - 📋 **Window strip** (opt-in): every window on a display, with its space,
   under that display's menu bar. **Hover-to-open** window menu (opt-in).
-- 🫳 **Drag windows between spaces** — in the search switcher (space cards) or
+- 🫳 **Drag windows between spaces** — in the Spaces-style search switcher or
   the window strip; works from any space, with or without SIP.
 - ✦ **Hyper Key** (opt-in): Caps Lock / right ⌘ / ⌥ / ⌃ acts as ⌃⌥⌘⇧.
 - 🖥️ Multi-monitor, all visible spaces.
@@ -244,7 +245,11 @@ falls back to its default. All keys:
   "switcherCaptureCmdTab": false,
   "switcherHotkeyAll": "alt - tab",
   "switcherHotkeyApp": "alt - 0x32",
-  "switcherHotkeySpace": ""
+  "switcherHotkeySpace": "",
+  "switcherFollowMove": false,
+  "switcherWallpaper": false,
+  "switcherWallpaperPath": "",
+  "switcherWallpaperDarkPath": ""
 }
 ```
 
@@ -263,10 +268,13 @@ falls back to its default. All keys:
   bar icon. `windowStrip`: show the per-display window strip;
   `windowStripScale`: its size (0.5–1.5, default 0.8).
 - `hyper*`: see [Hyper Key](#hyper-key).
-- `switcher*`: the window switcher — `switcherAppearance` is `"thumbnails"`,
-  `"icons"` or `"titles"`; the three hotkeys use skhd notation (`"alt - tab"`;
-  `0x32` is backtick; empty string disables that scope). All editable from
-  **Settings → Switcher**.
+- `switcher*`: the window switcher — `switcherAppearance` (hold-to-cycle only)
+  is `"thumbnails"`, `"icons"` or `"titles"`; the three hotkeys use skhd notation
+  (`"alt - tab"`; `0x32` is backtick; empty string disables that scope).
+  `switcherFollowMove`: with the scripting addition, follow a window dragged to
+  another space in the search switcher. `switcherWallpaper` + `…Path` /
+  `…DarkPath`: image files shown behind the search switcher's space cards. All
+  editable from **Settings → Switcher**.
 
 Most of these are adjustable from **Settings…** in the menu bar (no file editing
 needed). The config file is still created automatically on first launch at
@@ -399,23 +407,6 @@ ordered most-recently-used:
 - **Permissions:** hold-to-cycle uses a global event tap → **Accessibility**.
   Sticky mode via the menu/skhd needs none beyond yabai itself.
 
-## Spaces View
-
-Open **Spaces View** from **Settings → Keyboard** or run
-`sh ~/.config/yabai-dockstack/scripts/openSpacesView.sh`. It shows every space,
-grouped by display, with the windows currently assigned to each space.
-
-- Drag a window preview onto another space to move it there. The current focus is
-  preserved by default; enable **Focus destination after moving a window** in
-  **Settings → Switcher** to focus the destination instead.
-- Drag a space card onto another space to move all of its windows there. This
-  works for any destination, without depending on adjacent-space commands.
-- Space cards show thumbnail-only previews. Visible windows use live or cached
-  thumbnails; hidden-space windows use the last cached thumbnail, or an app icon
-  when no capture is available.
-- Moving windows between spaces requires a working yabai instance. Sticky windows
-  retain their sticky behavior when moved.
-
 ## Dock window previews
 
 Hover a **Dock app icon** to pop up that app's windows across all spaces; click one
@@ -461,17 +452,26 @@ Both are off by default — turn them on in **Settings → Appearance**.
 ## Drag windows between spaces
 
 Mission Control only lets you drag windows *from the current* space. Open the
-**search switcher** (Settings → Switcher → "Search switcher" hotkey): windows
-are shown as one card per space — every space, empty ones too, grouped per
-display, with the space you're on marked **Current**. Drag a window
-onto another card to move it there, including into the space you're on. The
-same works by dragging a chip in the window strip.
+**search switcher** (Settings → Switcher → "Search switcher" hotkey): every
+space is shown as a mini desktop, grouped by display, with its windows tiled
+inside (based on @Signynt's Spaces View, #4). Each window carries a capsule with
+its app icon and project name; the space you're on is marked **Current**. Type
+to filter — windows that don't match are dimmed. Arrow keys / Enter / click
+focus a window; clicking an empty part of a card goes to that space.
 
-- With yabai's scripting addition: the move is instant (`yabai -m window --space`).
-- With SIP on: the app focuses the window (jumping to its space) and walks it
-  over with the same simulated gesture as the send-to-space hotkeys — you'll see
-  it travel. Windows closed to the tray can't be moved this way.
-- You end up on the destination space with the moved window focused.
+- **Drag a window** onto another space to move it there, including into the
+  space you're on. The same works by dragging a chip in the window strip.
+  - With yabai's scripting addition: the move is instant and the switcher
+    stays open, so you can move several windows. Turn on **Follow a window
+    dragged to another space** (Settings → Switcher) to go with it instead.
+  - With SIP on: the switcher closes, the app focuses the window (jumping to its
+    space) and walks it over with the same simulated gesture as the
+    send-to-space hotkeys — you'll see it travel — and you end on the
+    destination space. Windows closed to the tray can't be moved this way.
+- **Drag a whole space** onto another to swap their windows. **Requires the
+  scripting addition**; with SIP on, dragging a space does nothing.
+- Optional wallpaper behind the cards (Settings → Switcher; pick a light and a
+  dark image).
 
 ## Hyper Key
 

@@ -33,9 +33,10 @@ dock 預覽、視窗切換器、cmd-tab 替代、選單列、Mission Control 替
 - **依專案顯示標籤** —— 同一個 app 的多個視窗用專案名稱區分:VS Code / Cursor 顯示
   workspace、JetBrains 顯示專案、終端機顯示目前資料夾。套用在切換器、Dock 預覽、
   視窗選單和新的視窗列。
-- **拖曳視窗到其他 space** —— 在搜尋式切換器(現在每個 space 一張卡片,含空的 space)或
-  視窗列,把視窗拖到另一個 space 就會移過去,即使它不在目前的 space。有 yabai scripting
-  addition 時直接移動,SIP 開著也能用。
+- **Spaces 風格的搜尋式切換器**(來自 @Signynt 的 Spaces View,#4)—— 每個 space 顯示成
+  迷你桌面和裡面的視窗;把視窗拖到另一個 space 就會移過去,即使它不在目前的 space
+  (視窗列也可以拖)。有 yabai scripting addition 時直接移動,SIP 開著也能用。
+  拖曳整個 space 交換視窗需要 scripting addition。
 - **視窗列**(選用)—— 每個螢幕的選單列下方列出該螢幕的所有視窗與所在 space,點一下跳轉。
 - **滑鼠停留自動展開**視窗選單(選用)。
 - **按住 ⌃ 拖曳**指示器圖示即可調整 stack 順序。
@@ -202,13 +203,20 @@ space 並聚焦。
 ## 拖曳視窗到其他 space
 
 Mission Control 只能把**目前** space 的視窗拖走。打開**搜尋式切換器**(Settings → Switcher
-→「搜尋式切換器」熱鍵):視窗以「每個 space 一張卡片」顯示,空的 space 也在,並依顯示器分組,目前所在的 space 標示 **目前**。把視窗拖到
-另一張卡片就移過去,也能拖進你目前所在的 space。在視窗列拖曳 chip 也一樣。
+→「搜尋式切換器」熱鍵):每個 space 顯示成一張迷你桌面,依顯示器分組,裡面排著它的視窗
+(來自 @Signynt 的 Spaces View,#4)。每個視窗有一個膠囊標籤,顯示 App 圖示和專案名稱;
+目前所在的 space 標示 **目前**。直接打字篩選,不符合的視窗會變淡。方向鍵 / Enter / 點擊
+focus 視窗;點卡片的空白處會跳到那個 space。
 
-- 有 yabai scripting addition:直接移動(`yabai -m window --space`)。
-- SIP 開著:app 會先 focus 該視窗(跳到它的 space),再用和「移到 space」快捷鍵相同的模擬
-  手勢帶過去——你會看到它移動的過程。縮到系統匣的視窗無法用這種方式移動。
-- 結束時停在目標 space,並 focus 被移動的視窗。
+- **拖曳視窗**到另一個 space 就移過去,也能拖進你目前所在的 space。在視窗列拖曳 chip 也一樣。
+  - 有 yabai scripting addition:瞬間移動,切換器保持開著,可以連續移好幾個視窗。在
+    Settings → Switcher 打開 **拖到其他 space 後跟著視窗過去** 則會跟著跳過去。
+  - SIP 開著:切換器會關閉,app 先 focus 該視窗(跳到它的 space),再用和「移到 space」
+    快捷鍵相同的模擬手勢帶過去——你會看到它移動的過程——最後停在目標 space。縮到系統匣
+    的視窗無法用這種方式移動。
+- **拖曳整個 space** 到另一個 space 會交換兩邊的視窗。**需要 scripting addition**;SIP
+  開著時拖曳 space 沒有作用。
+- 可選擇在卡片後面顯示桌布(Settings → Switcher,可分別指定淺色和深色圖片)。
 
 ## Hyper Key
 
