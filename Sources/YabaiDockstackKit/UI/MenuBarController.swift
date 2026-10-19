@@ -99,9 +99,12 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
                 for space in display.spaces {
                     menu.addItem(disabledHeader(space.name, indent: 1))
                     for win in space.windows {
-                        let label = win.title.isEmpty ? win.app : "\(win.app) — \(win.title)"
+                        let label = win.keyword != win.app
+                            ? "\(win.keyword) — \(win.app)"
+                            : (win.title.isEmpty ? win.app : "\(win.app) — \(win.title)")
                         let item = NSMenuItem(title: truncate(label),
                                               action: #selector(selectWindow(_:)), keyEquivalent: "")
+                        item.toolTip = win.title.isEmpty ? nil : win.title
                         item.target = self
                         item.indentationLevel = 2
                         item.representedObject = win.id

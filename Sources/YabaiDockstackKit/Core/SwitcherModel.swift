@@ -14,11 +14,14 @@ public struct SwitcherItem: Equatable {
     public let space: Int
     public let display: Int
     public let hasFocus: Bool
+    /// Short distinguishing label (e.g. project name); see `WindowLabeler`.
+    public let keyword: String
 
     public init(id: Int, pid: Int, app: String, title: String,
-                space: Int, display: Int, hasFocus: Bool) {
+                space: Int, display: Int, hasFocus: Bool, keyword: String? = nil) {
         self.id = id; self.pid = pid; self.app = app; self.title = title
         self.space = space; self.display = display; self.hasFocus = hasFocus
+        self.keyword = keyword ?? app
     }
 }
 
@@ -30,6 +33,7 @@ public enum SwitcherModel {
     /// which lag behind until the next yabai signal lands.
     public static func build(windows: [YabaiWindow], mru: [Int],
                              scope: SwitcherScope, query: String = "") -> [SwitcherItem] {
+        let keywords = WindowLabeler.keywords(windows)
         let anchor = mru.lazy.compactMap { id in windows.first { $0.id == id } }.first
             ?? windows.first { $0.hasFocus }
         var pool = windows
@@ -58,7 +62,8 @@ public enum SwitcherModel {
         }
         return sorted.map {
             SwitcherItem(id: $0.id, pid: $0.pid, app: $0.app, title: $0.title,
-                         space: $0.space, display: $0.display, hasFocus: $0.hasFocus)
+                         space: $0.space, display: $0.display, hasFocus: $0.hasFocus,
+                         keyword: keywords[$0.id])
         }
     }
 

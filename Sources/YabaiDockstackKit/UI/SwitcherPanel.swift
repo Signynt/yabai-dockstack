@@ -317,9 +317,7 @@ final class SwitcherCellView: NSView {
             addSubview(badge)
         }
 
-        let label = NSTextField(labelWithString: cellTitle(item))
-        label.font = .systemFont(ofSize: 11)
-        label.textColor = .labelColor
+        let label = cellLabel(item, size: 11)
         label.lineBreakMode = .byTruncatingTail
         label.alignment = .center
         label.frame = NSRect(x: pad, y: frame.height - pad - labelH + 2,
@@ -336,9 +334,7 @@ final class SwitcherCellView: NSView {
         icon.image = item.icon
         addSubview(icon)
 
-        let label = NSTextField(labelWithString: cellTitle(item))
-        label.font = .systemFont(ofSize: 11)
-        label.textColor = .labelColor
+        let label = cellLabel(item, size: 11)
         label.lineBreakMode = .byTruncatingTail
         label.alignment = .center
         label.maximumNumberOfLines = 2
@@ -364,19 +360,30 @@ final class SwitcherCellView: NSView {
         space.autoresizingMask = [.minXMargin]
         addSubview(space)
 
-        let label = NSTextField(labelWithString: cellTitle(item))
-        label.font = .systemFont(ofSize: 12)
-        label.textColor = .labelColor
+        let label = cellLabel(item, size: 12)
         label.lineBreakMode = .byTruncatingTail
         label.frame = NSRect(x: 34, y: (frame.height - 16) / 2,
                              width: space.frame.minX - 42, height: 16)
         addSubview(label)
     }
 
-    private func cellTitle(_ item: SwitcherDisplayItem) -> String {
-        let t = item.item.title
-        if t.isEmpty || t == item.item.app { return item.item.app }
-        return "\(item.item.app) — \(t)"
+    /// Keyword (e.g. project name) first in semibold, app dimmed after it;
+    /// the full title is on the tooltip.
+    private func cellLabel(_ item: SwitcherDisplayItem, size: CGFloat) -> NSTextField {
+        let it = item.item
+        let text = NSMutableAttributedString(string: it.keyword, attributes: [
+            .font: NSFont.systemFont(ofSize: size, weight: .semibold),
+            .foregroundColor: NSColor.labelColor,
+        ])
+        if it.keyword != it.app {
+            text.append(NSAttributedString(string: "  ·  \(it.app)", attributes: [
+                .font: NSFont.systemFont(ofSize: size),
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ]))
+        }
+        let label = NSTextField(labelWithAttributedString: text)
+        label.toolTip = it.title.isEmpty ? it.app : "\(it.app) — \(it.title)"
+        return label
     }
 
     private func addSpaceTag(_ item: SwitcherDisplayItem) {

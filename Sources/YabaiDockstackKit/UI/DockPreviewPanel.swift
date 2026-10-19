@@ -4,11 +4,14 @@ import CoreGraphics
 public struct PreviewItem {
     public let windowID: Int
     public let title: String
+    /// Short distinguishing label (e.g. project name); see `WindowLabeler`.
+    public let keyword: String
     public let space: Int
     public let thumbnail: CGImage?
     public let icon: NSImage
-    public init(windowID: Int, title: String, space: Int, thumbnail: CGImage?, icon: NSImage) {
-        self.windowID = windowID; self.title = title; self.space = space
+    public init(windowID: Int, title: String, keyword: String, space: Int,
+                thumbnail: CGImage?, icon: NSImage) {
+        self.windowID = windowID; self.title = title; self.keyword = keyword; self.space = space
         self.thumbnail = thumbnail; self.icon = icon
     }
 }
@@ -104,7 +107,8 @@ final class PreviewCell: NSView {
         else { imgView.image = item.icon }
         addSubview(imgView)
 
-        let label = NSTextField(labelWithString: "\(item.title)  ·  Space \(item.space)")
+        let label = NSTextField(labelWithString: "\(item.keyword)  ·  Space \(item.space)")
+        toolTip = item.title
         label.font = .systemFont(ofSize: 11)
         label.textColor = .white
         label.lineBreakMode = .byTruncatingTail

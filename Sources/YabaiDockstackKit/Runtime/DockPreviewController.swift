@@ -95,8 +95,10 @@ public final class DockPreviewController {
     }
 
     private func items(for wins: [YabaiWindow]) -> [PreviewItem] {
-        wins.map { win in
-            PreviewItem(windowID: win.id, title: win.title, space: win.space,
+        let keywords = WindowLabeler.keywords(wins)
+        return wins.map { win in
+            PreviewItem(windowID: win.id, title: win.title,
+                        keyword: keywords[win.id] ?? win.app, space: win.space,
                         thumbnail: cache.get(win.id), icon: icon(for: win))
         }
     }

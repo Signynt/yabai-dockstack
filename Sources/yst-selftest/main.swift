@@ -754,6 +754,36 @@ do {
           "switcher socket script ships")
 }
 
+print("WindowLabeler")
+do {
+    func k(_ app: String, _ title: String, _ sib: [String] = []) -> String {
+        WindowLabeler.keyword(app: app, title: title, siblingTitles: sib)
+    }
+    check(k("Code", "Stack.swift — yabai-dockstack") == "yabai-dockstack", "VS Code → workspace")
+    check(k("Code", "● Stack.swift — yabai-dockstack — Visual Studio Code") == "yabai-dockstack", "VS Code dirty + app suffix → workspace")
+    check(k("Code", "deployer") == "deployer", "VS Code bare folder")
+    check(k("Cursor", "main.go — api-server") == "api-server", "Cursor → workspace")
+    check(k("IntelliJ IDEA", "shop-backend – OrderService.kt") == "shop-backend", "JetBrains → project")
+    check(k("Warp", "~/Project/yabai-dockstack") == "yabai-dockstack", "Warp → cwd leaf")
+    check(k("iTerm2", "les@mac: ~/work/foo") == "foo", "iTerm2 user@host: cwd → leaf")
+    check(k("Warp", "~") == "~", "home stays ~")
+    check(k("Notes", "Notes - Groceries", ["Notes - Work"]) == "Groceries", "siblings → differing segment")
+    check(k("Preview", "a.pdf | Page 1", ["b.pdf | Page 1"]) == "a.pdf", "siblings → first differing segment")
+    check(k("Gather", "") == "Gather", "empty title → app")
+    check(k("Safari", "Safari") == "Safari", "title == app → app")
+    check(k("Safari", "蘋果新聞") == "蘋果新聞", "CJK title kept")
+    let r = YRect(x: 0, y: 0, w: 1, h: 1)
+    let ws = [YabaiWindow(id: 1, pid: 1, app: "Code", title: "a.swift — projA", frame: r, display: 1, space: 1, stackIndex: 0, hasFocus: false),
+              YabaiWindow(id: 2, pid: 1, app: "Code", title: "b.swift — projB", frame: r, display: 1, space: 2, stackIndex: 0, hasFocus: false)]
+    check(WindowLabeler.keywords(ws) == [1: "projA", 2: "projB"], "batch keywords per window")
+    check(SwitcherModel.build(windows: ws, mru: [], scope: .allWindows).map(\.keyword) == ["projA", "projB"],
+          "switcher items carry keywords")
+    check(SwitcherModel.build(windows: ws, mru: [], scope: .allWindows, query: "projB").first?.keyword == "projB",
+          "switcher keyword keeps siblings outside the filtered pool")
+    check(WindowMenuModel.build(ws).first?.spaces.flatMap { $0.windows.map(\.keyword) } == ["projA", "projB"],
+          "menu entries carry keywords")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }
