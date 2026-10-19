@@ -3,7 +3,7 @@
 All notable changes to yabai-dockstack. Full release notes and downloads live on
 the [GitHub Releases](https://github.com/z20240/yabai-dockstack/releases) page.
 
-## v0.3.0 — 2026-10-19
+## v0.3.0 — 2026-10-20
 
 - **Spaces-style search switcher & drag windows between spaces** (based on
   @Signynt's Spaces View, #4) — the search switcher now shows every space as a
