@@ -23,6 +23,8 @@ the [GitHub Releases](https://github.com/z20240/yabai-dockstack/releases) page.
   click to jump, hover for title and space, resizable from Settings, "+N"
   overflow opens the menu; hidden over native-fullscreen spaces.
 - **Hover to open the window menu** (opt-in).
+- **Dock previews match the rest of the app** — same frosted panel as the
+  switcher, colours follow light/dark mode (thanks @Signynt, #5).
 - **⌃-drag to reorder a stack** from its indicator (on by default; uses yabai
   `--swap`, works without the scripting addition).
 - **Hyper Key** (opt-in) — Caps Lock / right ⌘ / ⌥ / ⌃ → ⌃⌥⌘(⇧), with quick
