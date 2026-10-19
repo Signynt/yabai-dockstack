@@ -978,7 +978,20 @@ do {
     let s = SwitcherSections.build(items: [item(9, space: 3, display: 2), item(5, space: 1), item(4, space: 1)],
                                    spaces: spaces, labels: [3: "web"])
     check(s.map(\.space) == [1, 2, 3], "every space is a section, incl. empty, display order")
-    check(s.map(\.name) == ["D1 · Space 1", "D1 · Space 2", "D2 · web"], "section names (display prefix when >1)")
+    check(s.map(\.name) == ["Space 1", "Space 2", "web"], "section names (display named by its band)")
+    let fsp = [SpaceInfo(index: 1, display: 1, isVisible: true, hasFocus: true), SpaceInfo(index: 2, display: 1, isVisible: false),
+               SpaceInfo(index: 3, display: 2, isVisible: true)]
+    let fs3 = SwitcherSections.build(items: [], spaces: fsp, labels: [:])
+    check(fs3.map(\.hasFocus) == [true, false, false] && fs3.map(\.isVisible) == [true, false, true],
+          "sections mark the focused and visible spaces")
+    check(SpaceInfo.decodeList(Data(#"[{"index":1,"display":1,"has-focus":true},{"index":2,"display":1}]"#.utf8)).map(\.hasFocus) == [true, false],
+          "SpaceInfo decodes has-focus")
+    let band = SwitcherSections.layout(counts: [1, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
+                                       gap: 10, headerHeight: 20, emptyHeight: 30, maxWidth: 1000,
+                                       displays: [1, 1, 2], displayHeader: 24, displayPad: 10)
+    check(band.sections.map(\.origin) == [CGPoint(x: 10, y: 24), CGPoint(x: 130, y: 24), CGPoint(x: 10, y: 148)]
+          && band.displays == [CGRect(x: 0, y: 0, width: 240, height: 104), CGRect(x: 0, y: 124, width: 240, height: 104)]
+          && band.size == CGSize(width: 240, height: 228), "each display gets its own band of space cards")
     check(s.first?.items.map(\.id) == [5, 4], "MRU order kept inside a section")
     let wide = SwitcherSections.layout(counts: [3, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
                                        gap: 10, headerHeight: 20, emptyHeight: 30, maxWidth: 1000)

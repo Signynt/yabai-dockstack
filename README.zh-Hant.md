@@ -202,7 +202,7 @@ space 並聚焦。
 ## 拖曳視窗到其他 space
 
 Mission Control 只能把**目前** space 的視窗拖走。打開**搜尋式切換器**(Settings → Switcher
-→「搜尋式切換器」熱鍵):視窗以「每個 space 一張卡片」顯示,空的 space 也在。把視窗拖到
+→「搜尋式切換器」熱鍵):視窗以「每個 space 一張卡片」顯示,空的 space 也在,並依顯示器分組,目前所在的 space 標示 **目前**。把視窗拖到
 另一張卡片就移過去,也能拖進你目前所在的 space。在視窗列拖曳 chip 也一樣。
 
 - 有 yabai scripting addition:直接移動(`yabai -m window --space`)。

@@ -6,7 +6,8 @@ the [GitHub Releases](https://github.com/z20240/yabai-dockstack/releases) page.
 ## v0.3.0 — 2026-10-19
 
 - **Drag windows between spaces** — the search switcher now shows one card per
-  space (empty spaces included) and the window strip opens empty spaces as drop
+  space (empty spaces included), grouped per display with the space you're on
+  marked "Current", and the window strip opens empty spaces as drop
   slots while dragging; drop a window on another space to move it there, even
   from a space you're not on. Scripting addition → `yabai -m window --space`;
   SIP on → focus the window and walk it over with the simulated gesture. You end

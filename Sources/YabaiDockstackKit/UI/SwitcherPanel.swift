@@ -43,6 +43,7 @@ public final class SwitcherPanel {
     private var sectionLayout: SectionLayout?
     private var sectionSpaces: [Int] = []
     private var sectionHeaders: [NSTextField] = []
+    private var sectionHeaderColors: [NSColor] = []
     private weak var sectionBody: NSView?
     private var dragGhost: NSImageView?
     private var dragSource: Int?
@@ -74,6 +75,7 @@ public final class SwitcherPanel {
         cellFrames = nil
         sectionLayout = nil
         sectionHeaders = []
+        sectionHeaderColors = []
         endDrag()
         let content: NSView
         var contentSize: CGSize
@@ -238,30 +240,80 @@ public final class SwitcherPanel {
             cell = CGSize(width: min(CGFloat(640), maxW), height: 30)
         }
         columns = cols
+        let displays = sections.map(\.display)
+        let multiDisplay = Set(displays).count > 1
         let layout = SwitcherSections.layout(counts: sections.map { $0.items.count }, columns: cols,
                                              cell: cell, gap: Double(gap), headerHeight: titleH,
-                                             emptyHeight: emptyH, maxWidth: Double(maxW))
+                                             emptyHeight: emptyH, maxWidth: Double(maxW),
+                                             displays: multiDisplay ? displays : [],
+                                             displayHeader: 26, displayPad: 12)
         sectionLayout = layout
         sectionSpaces = sections.map(\.space)
         cellFrames = layout.cells
 
         let body = FlippedView(frame: CGRect(origin: .zero, size: layout.size))
         sectionBody = body
+        // One band per display, its number in the corner.
+        let orderedDisplays = displays.reduce(into: [Int]()) { if $0.last != $1 { $0.append($1) } }
+        for (bi, band) in layout.displays.enumerated() {
+            let v = NSView(frame: band)
+            v.wantsLayer = true
+            v.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.16).cgColor
+            v.layer?.borderColor = NSColor.white.withAlphaComponent(0.10).cgColor
+            v.layer?.borderWidth = 1
+            v.layer?.cornerRadius = 14
+            body.addSubview(v)
+            let n = orderedDisplays.indices.contains(bi) ? orderedDisplays[bi] : bi + 1
+            let label = NSTextField(labelWithString: String(format: L10n.t("ui.menu.displayN"), n))
+            label.font = .systemFont(ofSize: 12, weight: .bold)
+            label.textColor = .labelColor
+            label.sizeToFit()
+            label.frame.origin = CGPoint(x: band.minX + 12, y: band.minY + (26 - label.frame.height) / 2 + 2)
+            body.addSubview(label)
+        }
         for (si, section) in sections.enumerated() {
             let h = layout.headers[si]
-            let title = NSTextField(labelWithString: section.name)
-            title.font = .systemFont(ofSize: 12, weight: .semibold)
-            title.textColor = .secondaryLabelColor
-            title.wantsLayer = true
-            title.layer?.cornerRadius = 4
-            title.frame = CGRect(x: h.minX, y: h.minY + 2, width: h.width, height: h.height - 4)
-            body.addSubview(title)
-            sectionHeaders.append(title)
             let card = NSView(frame: layout.sections[si].insetBy(dx: -4, dy: -2))
             card.wantsLayer = true
-            card.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.05).cgColor
             card.layer?.cornerRadius = 10
-            body.addSubview(card, positioned: .below, relativeTo: nil)
+            card.layer?.backgroundColor = NSColor.white.withAlphaComponent(section.hasFocus ? 0.12 : 0.05).cgColor
+            if section.hasFocus {
+                card.layer?.borderColor = NSColor.systemGreen.cgColor
+                card.layer?.borderWidth = 2
+            } else if section.isVisible {
+                card.layer?.borderColor = NSColor.white.withAlphaComponent(0.3).cgColor
+                card.layer?.borderWidth = 1
+            }
+            body.addSubview(card)
+            // "Current" (the space you're on) / "Visible" (on screen on another display).
+            var tagW: CGFloat = 0
+            if section.hasFocus || section.isVisible {
+                let tag = NSTextField(labelWithString: L10n.t(section.hasFocus ? "ui.switcher.currentSpace"
+                                                                               : "ui.switcher.visibleSpace"))
+                tag.font = .systemFont(ofSize: 10, weight: .bold)
+                tag.textColor = section.hasFocus ? .white : .labelColor
+                tag.alignment = .center
+                tag.wantsLayer = true
+                tag.layer?.cornerRadius = 4
+                tag.layer?.backgroundColor = (section.hasFocus ? NSColor.systemGreen
+                                              : NSColor.white.withAlphaComponent(0.18)).cgColor
+                tag.sizeToFit()
+                tagW = tag.frame.width + 10
+                tag.frame = CGRect(x: h.maxX - tagW, y: h.minY + (h.height - tag.frame.height) / 2,
+                                   width: tagW, height: tag.frame.height)
+                body.addSubview(tag)
+            }
+            let title = NSTextField(labelWithString: section.name)
+            let color: NSColor = section.hasFocus ? .labelColor : .secondaryLabelColor
+            title.font = .systemFont(ofSize: 12, weight: .semibold)
+            title.textColor = color
+            title.lineBreakMode = .byTruncatingTail
+            title.wantsLayer = true
+            title.layer?.cornerRadius = 4
+            title.frame = CGRect(x: h.minX, y: h.minY + 2, width: max(h.width - tagW - 4, 20), height: h.height - 4)
+            body.addSubview(title)
+            sectionHeaders.append(title)
+            sectionHeaderColors.append(color)
             if section.items.isEmpty {
                 let hint = NSTextField(labelWithString: L10n.t("ui.switcher.emptySpace"))
                 hint.font = .systemFont(ofSize: 11)
@@ -325,7 +377,7 @@ public final class SwitcherPanel {
             for (i, h) in sectionHeaders.enumerated() {
                 h.layer?.backgroundColor = i == hovered
                     ? NSColor.controlAccentColor.withAlphaComponent(0.35).cgColor : nil
-                h.textColor = i == hovered ? .labelColor : .secondaryLabelColor
+                h.textColor = i == hovered ? .labelColor : sectionHeaderColors[i]
             }
         case .ended:
             let target = SwitcherSections.section(at: body.convert(event.locationInWindow, from: nil),
@@ -346,7 +398,10 @@ public final class SwitcherPanel {
         if let src = dragSource, cells.indices.contains(src) { cells[src].alphaValue = 1 }
         dragSource = nil
         dragWindowId = nil
-        for h in sectionHeaders { h.layer?.backgroundColor = nil; h.textColor = .secondaryLabelColor }
+        for (i, h) in sectionHeaders.enumerated() {
+            h.layer?.backgroundColor = nil
+            h.textColor = sectionHeaderColors[i]
+        }
     }
 
     public func updateSelection(_ index: Int) {

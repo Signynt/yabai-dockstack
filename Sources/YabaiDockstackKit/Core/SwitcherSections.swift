@@ -7,6 +7,10 @@ public struct SwitcherSection: Equatable {
     public let display: Int
     public let name: String
     public let items: [SwitcherItem]
+    /// Shown on its display right now.
+    public let isVisible: Bool
+    /// The space the user is on.
+    public let hasFocus: Bool
 }
 
 /// Geometry of a sectioned switcher: one card per space (header + cells),
@@ -18,6 +22,8 @@ public struct SectionLayout: Equatable {
     public let headers: [CGRect]
     /// Cell frames in flattened (section by section) item order.
     public let cells: [CGRect]
+    /// One band per display (multi-display only), enclosing its cards.
+    public let displays: [CGRect]
     public let size: CGSize
 }
 
@@ -25,37 +31,50 @@ public struct SectionLayout: Equatable {
 /// spaces; every space is listed (empty ones are drop targets too).
 public enum SwitcherSections {
     /// Sections in (display, space index) order; items keep their incoming
-    /// (MRU) order. Names are the yabai label or "Space N", prefixed with the
-    /// display when there's more than one.
+    /// (MRU) order. Names are the yabai label or "Space N" (the display is
+    /// named by its band in the layout).
     public static func build(items: [SwitcherItem], spaces: [SpaceInfo],
                              labels: [Int: String]) -> [SwitcherSection] {
-        let multiDisplay = Set(spaces.map(\.display)).count > 1
         // Native-fullscreen spaces can't take other windows.
-        return spaces.filter { !$0.isNativeFullscreen }.sorted { ($0.display, $0.index) < ($1.display, $1.index) }.map { sp in
+        spaces.filter { !$0.isNativeFullscreen }.sorted { ($0.display, $0.index) < ($1.display, $1.index) }.map { sp in
             let label = labels[sp.index] ?? ""
-            let base = label.isEmpty ? "Space \(sp.index)" : label
             return SwitcherSection(space: sp.index, display: sp.display,
-                                   name: multiDisplay ? "D\(sp.display) · \(base)" : base,
-                                   items: items.filter { $0.space == sp.index })
+                                   name: label.isEmpty ? "Space \(sp.index)" : label,
+                                   items: items.filter { $0.space == sp.index },
+                                   isVisible: sp.isVisible, hasFocus: sp.hasFocus)
         }
     }
 
     /// Cards are `min(count, columns)` cells wide (one cell when empty); they
     /// sit `2 × gap` apart and wrap to a new row past `maxWidth`.
+    /// `displays` (one per count): each display starts a new band — a
+    /// `displayHeader` title row, cards inset by `displayPad`; empty = no bands.
     public static func layout(counts: [Int], columns: Int, cell: CGSize, gap: Double,
-                              headerHeight: Double, emptyHeight: Double, maxWidth: Double) -> SectionLayout {
+                              headerHeight: Double, emptyHeight: Double, maxWidth: Double,
+                              displays: [Int] = [], displayHeader: Double = 0,
+                              displayPad: Double = 0) -> SectionLayout {
         let cols = max(columns, 1)
         let g = CGFloat(gap), sep = CGFloat(gap) * 2
         let hh = CGFloat(headerHeight)
+        let banded = !displays.isEmpty && displays.count == counts.count
+        let pad = banded ? CGFloat(displayPad) : 0, dh = banded ? CGFloat(displayHeader) : 0
         var sections: [CGRect] = [], headers: [CGRect] = [], cells: [CGRect] = []
-        var x: CGFloat = 0, y: CGFloat = 0, rowH: CGFloat = 0, width: CGFloat = 0
-        for n in counts {
+        var bands: [(top: CGFloat, bottom: CGFloat)] = []
+        var bandTop: CGFloat = 0
+        var x: CGFloat = pad, y: CGFloat = dh, rowH: CGFloat = 0, width: CGFloat = 0
+        for (si, n) in counts.enumerated() {
             let across = max(min(n, cols), 1)
             let w = CGFloat(across) * cell.width + CGFloat(across - 1) * g
             let rows = (n + cols - 1) / cols
             let bodyH = n == 0 ? CGFloat(emptyHeight) : CGFloat(rows) * cell.height + CGFloat(rows - 1) * g
             let h = hh + bodyH
-            if x > 0 && x + w > CGFloat(maxWidth) { x = 0; y += rowH + sep; rowH = 0 }
+            if banded && si > 0 && displays[si] != displays[si - 1] {
+                bands.append((bandTop, y + rowH + pad))
+                bandTop = y + rowH + pad + sep
+                x = pad; y = bandTop + dh; rowH = 0
+            } else if x > pad && x + w > CGFloat(maxWidth) - pad {
+                x = pad; y += rowH + sep; rowH = 0
+            }
             let card = CGRect(x: x, y: y, width: w, height: h)
             sections.append(card)
             headers.append(CGRect(x: x, y: y, width: w, height: hh))
@@ -68,8 +87,15 @@ public enum SwitcherSections {
             rowH = max(rowH, h)
             x += w + sep
         }
+        guard banded else {
+            return SectionLayout(sections: sections, headers: headers, cells: cells, displays: [],
+                                 size: CGSize(width: width, height: y + rowH))
+        }
+        bands.append((bandTop, y + rowH + pad))
+        let fullW = width + pad
         return SectionLayout(sections: sections, headers: headers, cells: cells,
-                             size: CGSize(width: width, height: y + rowH))
+                             displays: bands.map { CGRect(x: 0, y: $0.top, width: fullW, height: $0.bottom - $0.top) },
+                             size: CGSize(width: fullW, height: y + rowH + pad))
     }
 
     /// ↑/↓: the cell nearest in x on the closest visual row above / below.

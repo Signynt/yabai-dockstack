@@ -445,7 +445,8 @@ Both are off by default — turn them on in **Settings → Appearance**.
 
 Mission Control only lets you drag windows *from the current* space. Open the
 **search switcher** (Settings → Switcher → "Search switcher" hotkey): windows
-are shown as one card per space — every space, empty ones too. Drag a window
+are shown as one card per space — every space, empty ones too, grouped per
+display, with the space you're on marked **Current**. Drag a window
 onto another card to move it there, including into the space you're on. The
 same works by dragging a chip in the window strip.
 

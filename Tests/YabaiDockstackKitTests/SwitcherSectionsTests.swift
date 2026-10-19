@@ -14,7 +14,7 @@ final class SwitcherSectionsTests: XCTestCase {
         let s = SwitcherSections.build(items: [item(9, space: 3, display: 2), item(5, space: 1), item(4, space: 1)],
                                        spaces: spaces, labels: [3: "web"])
         XCTAssertEqual(s.map(\.space), [1, 2, 3])
-        XCTAssertEqual(s.map(\.name), ["D1 · Space 1", "D1 · Space 2", "D2 · web"])
+        XCTAssertEqual(s.map(\.name), ["Space 1", "Space 2", "web"])  // the display band names the display
         XCTAssertEqual(s[0].items.map(\.id), [5, 4])  // incoming (MRU) order kept
         XCTAssertTrue(s[1].items.isEmpty)
     }
@@ -70,5 +70,32 @@ final class SwitcherSectionsTests: XCTestCase {
         let visible = CGRect(x: 0, y: 0, width: 450, height: 60)
         XCTAssertEqual(SwitcherSections.section(at: CGPoint(x: 50, y: 40), layout: l, visible: visible), 0)
         XCTAssertNil(SwitcherSections.section(at: CGPoint(x: 50, y: 100), layout: l, visible: visible))
+    }
+
+    func testSectionsCarryVisibleAndFocusedSpace() {
+        let sp = [SpaceInfo(index: 1, display: 1, isVisible: true, hasFocus: true),
+                  SpaceInfo(index: 2, display: 1, isVisible: false),
+                  SpaceInfo(index: 3, display: 2, isVisible: true)]
+        let s = SwitcherSections.build(items: [], spaces: sp, labels: [:])
+        XCTAssertEqual(s.map(\.hasFocus), [true, false, false])
+        XCTAssertEqual(s.map(\.isVisible), [true, false, true])
+    }
+
+    func testSpaceInfoDecodesFocus() {
+        let json = #"[{"index":1,"display":1,"is-visible":true,"has-focus":true},{"index":2,"display":1}]"#
+        XCTAssertEqual(SpaceInfo.decodeList(Data(json.utf8)).map(\.hasFocus), [true, false])
+    }
+
+    func testDisplayBandsGroupCardsPerDisplay() {
+        let l = SwitcherSections.layout(counts: [1, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
+                                        gap: 10, headerHeight: 20, emptyHeight: 30, maxWidth: 1000,
+                                        displays: [1, 1, 2], displayHeader: 24, displayPad: 10)
+        XCTAssertEqual(l.sections, [CGRect(x: 10, y: 24, width: 100, height: 70),
+                                    CGRect(x: 130, y: 24, width: 100, height: 50),
+                                    CGRect(x: 10, y: 148, width: 100, height: 70)])  // new display → new row
+        XCTAssertEqual(l.displays, [CGRect(x: 0, y: 0, width: 240, height: 104),
+                                    CGRect(x: 0, y: 124, width: 240, height: 104)])
+        XCTAssertEqual(l.size, CGSize(width: 240, height: 228))
+        XCTAssertTrue(layout(maxWidth: 1000).displays.isEmpty)  // single display: no bands
     }
 }
