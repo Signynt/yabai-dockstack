@@ -30,6 +30,17 @@ public final class SwitcherPanel {
 
     /// Columns of the current grid — the controller uses this for ↑/↓ movement.
     public private(set) var columns = 1
+    /// Sectioned (sticky) layout: cell frames for ↑/↓, nil in flat mode.
+    public private(set) var cellFrames: [CGRect]?
+    /// A cell was dragged onto another space's section: (item index, space).
+    public var onDropToSpace: ((Int, Int) -> Void)?
+
+    private var sectionLayout: SectionLayout?
+    private var sectionSpaces: [Int] = []
+    private var sectionHeaders: [NSTextField] = []
+    private weak var sectionBody: NSView?
+    private var dragGhost: NSImageView?
+    private var dragSource: Int?
 
     private var panel: SwitcherKeyPanel?
     private var cells: [SwitcherCellView] = []
@@ -39,7 +50,8 @@ public final class SwitcherPanel {
     public var isVisible: Bool { panel?.isVisible ?? false }
 
     public func show(items: [SwitcherDisplayItem], appearance: SwitcherAppearance,
-                     selection: Int, query: String, keyboardFocus: Bool) {
+                     selection: Int, query: String, keyboardFocus: Bool,
+                     sections: [SwitcherSection]? = nil) {
         let p = panel ?? makePanel()
         panel = p
 
@@ -53,10 +65,18 @@ public final class SwitcherPanel {
         let headerH: CGFloat = query.isEmpty ? 0 : 32
 
         cells = []
+        cellFrames = nil
+        sectionLayout = nil
+        sectionHeaders = []
+        endDrag()
         let content: NSView
         var contentSize: CGSize
 
-        if items.isEmpty {
+        if let sections, !sections.isEmpty {
+            (content, contentSize) = buildSectioned(items: items, sections: sections, appearance: appearance,
+                                                    selection: selection, maxW: maxW - pad * 2,
+                                                    maxH: maxH - pad * 2 - headerH, headerH: headerH, gap: gap)
+        } else if items.isEmpty {
             columns = 1
             let label = NSTextField(labelWithString: L10n.t("ui.switcher.noWindows"))
             label.font = .systemFont(ofSize: 14)
@@ -187,6 +207,135 @@ public final class SwitcherPanel {
             p.orderFrontRegardless()
         }
         scrollSelectionIntoView(selection)
+    }
+
+    // MARK: - Sectioned (sticky) mode
+
+    private func buildSectioned(items: [SwitcherDisplayItem], sections: [SwitcherSection],
+                                appearance: SwitcherAppearance, selection: Int, maxW: CGFloat,
+                                maxH: CGFloat, headerH: CGFloat, gap: CGFloat) -> (NSView, CGSize) {
+        let titleH: Double = 22, emptyH: Double = 40
+        let cols: Int, cell: CGSize
+        switch appearance {
+        case .thumbnails, .icons:
+            let base: (w: Double, minW: Double, label: Double) = appearance == .thumbnails
+                ? (240, 128, 24) : (136, 104, 44)
+            // Size cells as if every window (plus a header per card) shared one grid.
+            let grid = SwitcherLayout.grid(count: max(items.count + sections.count, 1), maxWidth: Double(maxW),
+                                           maxHeight: Double(maxH),
+                                           baseCellWidth: base.w, minCellWidth: base.minW,
+                                           labelHeight: base.label, gap: Double(gap))
+            cols = 3  // per space card; cards themselves flow across the panel
+            cell = CGSize(width: grid.cellWidth, height: grid.cellHeight)
+        case .titles:
+            cols = 1
+            cell = CGSize(width: min(CGFloat(640), maxW), height: 30)
+        }
+        columns = cols
+        let layout = SwitcherSections.layout(counts: sections.map { $0.items.count }, columns: cols,
+                                             cell: cell, gap: Double(gap), headerHeight: titleH,
+                                             emptyHeight: emptyH, maxWidth: Double(maxW))
+        sectionLayout = layout
+        sectionSpaces = sections.map(\.space)
+        cellFrames = layout.cells
+
+        let body = FlippedView(frame: CGRect(origin: .zero, size: layout.size))
+        sectionBody = body
+        for (si, section) in sections.enumerated() {
+            let h = layout.headers[si]
+            let title = NSTextField(labelWithString: section.name)
+            title.font = .systemFont(ofSize: 12, weight: .semibold)
+            title.textColor = .secondaryLabelColor
+            title.wantsLayer = true
+            title.layer?.cornerRadius = 4
+            title.frame = CGRect(x: h.minX, y: h.minY + 2, width: h.width, height: h.height - 4)
+            body.addSubview(title)
+            sectionHeaders.append(title)
+            let card = NSView(frame: layout.sections[si].insetBy(dx: -4, dy: -2))
+            card.wantsLayer = true
+            card.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.05).cgColor
+            card.layer?.cornerRadius = 10
+            body.addSubview(card, positioned: .below, relativeTo: nil)
+            if section.items.isEmpty {
+                let hint = NSTextField(labelWithString: L10n.t("ui.switcher.emptySpace"))
+                hint.font = .systemFont(ofSize: 11)
+                hint.textColor = .tertiaryLabelColor
+                hint.sizeToFit()
+                hint.frame.origin = CGPoint(x: h.minX + 8, y: h.maxY + (CGFloat(emptyH) - hint.frame.height) / 2)
+                body.addSubview(hint)
+            }
+        }
+        for (i, di) in items.enumerated() where i < layout.cells.count {
+            let c = SwitcherCellView(frame: layout.cells[i], index: i, item: di, mode: appearance,
+                                     onHover: { [weak self] in self?.onHover?($0) },
+                                     onClick: { [weak self] in self?.onClick?($0) },
+                                     onClose: { [weak self] in self?.onCloseItem?($0) })
+            c.isSelected = i == selection
+            c.onDrag = { [weak self] idx, phase, ev in self?.handleDrag(idx, phase, ev) }
+            cells.append(c)
+            body.addSubview(c)
+        }
+
+        let visibleH = min(layout.size.height, maxH)
+        let holder = FlippedView(frame: CGRect(x: 0, y: 0, width: layout.size.width, height: visibleH + headerH))
+        if layout.size.height > visibleH {
+            let scroll = NSScrollView(frame: CGRect(x: 0, y: headerH, width: layout.size.width, height: visibleH))
+            scroll.hasVerticalScroller = true
+            scroll.drawsBackground = false
+            scroll.documentView = body
+            holder.addSubview(scroll)
+        } else {
+            body.frame.origin.y = headerH
+            holder.addSubview(body)
+        }
+        return (holder, holder.frame.size)
+    }
+
+    private func handleDrag(_ index: Int, _ phase: SwitcherCellView.DragPhase, _ event: NSEvent) {
+        guard let body = sectionBody, let layout = sectionLayout,
+              let root = panel?.contentView, cells.indices.contains(index) else { return }
+        switch phase {
+        case .began:
+            dragSource = index
+            let cell = cells[index]
+            if let rep = cell.bitmapImageRepForCachingDisplay(in: cell.bounds) {
+                cell.cacheDisplay(in: cell.bounds, to: rep)
+                let img = NSImage(size: cell.bounds.size)
+                img.addRepresentation(rep)
+                let ghost = NSImageView(frame: CGRect(origin: .zero, size: cell.bounds.size))
+                ghost.image = img
+                ghost.alphaValue = 0.75
+                root.addSubview(ghost)
+                dragGhost = ghost
+            }
+            cell.alphaValue = 0.35
+        case .moved:
+            let p = root.convert(event.locationInWindow, from: nil)
+            dragGhost?.frame.origin = CGPoint(x: p.x - (dragGhost?.frame.width ?? 0) / 2,
+                                              y: p.y - (dragGhost?.frame.height ?? 0) / 2)
+            let hovered = SwitcherSections.section(at: body.convert(event.locationInWindow, from: nil),
+                                                   layout: layout)
+            for (i, h) in sectionHeaders.enumerated() {
+                h.layer?.backgroundColor = i == hovered
+                    ? NSColor.controlAccentColor.withAlphaComponent(0.35).cgColor : nil
+                h.textColor = i == hovered ? .labelColor : .secondaryLabelColor
+            }
+        case .ended:
+            let target = SwitcherSections.section(at: body.convert(event.locationInWindow, from: nil),
+                                                  layout: layout)
+            endDrag()
+            if let target, sectionSpaces.indices.contains(target) {
+                onDropToSpace?(index, sectionSpaces[target])
+            }
+        }
+    }
+
+    private func endDrag() {
+        dragGhost?.removeFromSuperview()
+        dragGhost = nil
+        if let src = dragSource, cells.indices.contains(src) { cells[src].alphaValue = 1 }
+        dragSource = nil
+        for h in sectionHeaders { h.layer?.backgroundColor = nil; h.textColor = .secondaryLabelColor }
     }
 
     public func updateSelection(_ index: Int) {
@@ -420,6 +569,33 @@ final class SwitcherCellView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) { onHover(index) }
-    override func mouseDown(with event: NSEvent) { onClick(index) }
+
+    /// Set in sticky (sectioned) mode: a press that moves past the threshold
+    /// becomes a drag instead of a click.
+    var onDrag: ((_ index: Int, _ phase: DragPhase, _ event: NSEvent) -> Void)?
+    enum DragPhase { case began, moved, ended }
+    private var pressPoint: NSPoint?
+    private var dragging = false
+
+    override func mouseDown(with event: NSEvent) {
+        guard onDrag != nil else { onClick(index); return }  // hold mode: click on press
+        pressPoint = event.locationInWindow
+        dragging = false
+    }
+    override func mouseDragged(with event: NSEvent) {
+        guard let onDrag, let start = pressPoint else { return }
+        let p = event.locationInWindow
+        if !dragging {
+            guard abs(p.x - start.x) + abs(p.y - start.y) > 4 else { return }
+            dragging = true
+            onDrag(index, .began, event)
+        }
+        onDrag(index, .moved, event)
+    }
+    override func mouseUp(with event: NSEvent) {
+        guard onDrag != nil, pressPoint != nil else { return }
+        pressPoint = nil
+        if dragging { dragging = false; onDrag?(index, .ended, event) } else { onClick(index) }
+    }
     @objc private func closeTapped() { onClose(index) }
 }

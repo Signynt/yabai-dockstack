@@ -9,8 +9,12 @@ public struct SwitcherSection: Equatable {
     public let items: [SwitcherItem]
 }
 
-/// Geometry of a sectioned switcher: a header row per section, then its cells.
+/// Geometry of a sectioned switcher: one card per space (header + cells),
+/// cards flowing left to right and wrapping into rows.
 public struct SectionLayout: Equatable {
+    /// Each space card's full rect.
+    public let sections: [CGRect]
+    /// Each card's header strip.
     public let headers: [CGRect]
     /// Cell frames in flattened (section by section) item order.
     public let cells: [CGRect]
@@ -35,27 +39,36 @@ public enum SwitcherSections {
         }
     }
 
+    /// Cards are `min(count, columns)` cells wide (one cell when empty); they
+    /// sit `2 × gap` apart and wrap to a new row past `maxWidth`.
     public static func layout(counts: [Int], columns: Int, cell: CGSize, gap: Double,
-                              headerHeight: Double, emptyHeight: Double) -> SectionLayout {
+                              headerHeight: Double, emptyHeight: Double, maxWidth: Double) -> SectionLayout {
         let cols = max(columns, 1)
-        let g = CGFloat(gap)
-        let width = CGFloat(cols) * cell.width + CGFloat(cols - 1) * g
-        var headers: [CGRect] = [], cells: [CGRect] = []
-        var y: CGFloat = 0
-        for (si, n) in counts.enumerated() {
-            if si > 0 { y += g }
-            headers.append(CGRect(x: 0, y: y, width: width, height: CGFloat(headerHeight)))
-            y += CGFloat(headerHeight)
-            if n == 0 { y += CGFloat(emptyHeight); continue }
+        let g = CGFloat(gap), sep = CGFloat(gap) * 2
+        let hh = CGFloat(headerHeight)
+        var sections: [CGRect] = [], headers: [CGRect] = [], cells: [CGRect] = []
+        var x: CGFloat = 0, y: CGFloat = 0, rowH: CGFloat = 0, width: CGFloat = 0
+        for n in counts {
+            let across = max(min(n, cols), 1)
+            let w = CGFloat(across) * cell.width + CGFloat(across - 1) * g
+            let rows = (n + cols - 1) / cols
+            let bodyH = n == 0 ? CGFloat(emptyHeight) : CGFloat(rows) * cell.height + CGFloat(rows - 1) * g
+            let h = hh + bodyH
+            if x > 0 && x + w > CGFloat(maxWidth) { x = 0; y += rowH + sep; rowH = 0 }
+            let card = CGRect(x: x, y: y, width: w, height: h)
+            sections.append(card)
+            headers.append(CGRect(x: x, y: y, width: w, height: hh))
             for i in 0..<n {
-                cells.append(CGRect(x: CGFloat(i % cols) * (cell.width + g),
-                                    y: y + CGFloat(i / cols) * (cell.height + g),
+                cells.append(CGRect(x: x + CGFloat(i % cols) * (cell.width + g),
+                                    y: y + hh + CGFloat(i / cols) * (cell.height + g),
                                     width: cell.width, height: cell.height))
             }
-            let rows = (n + cols - 1) / cols
-            y += CGFloat(rows) * cell.height + CGFloat(rows - 1) * g
+            width = max(width, card.maxX)
+            rowH = max(rowH, h)
+            x += w + sep
         }
-        return SectionLayout(headers: headers, cells: cells, size: CGSize(width: width, height: y))
+        return SectionLayout(sections: sections, headers: headers, cells: cells,
+                             size: CGSize(width: width, height: y + rowH))
     }
 
     /// ↑/↓: the cell nearest in x on the closest visual row above / below.
@@ -68,9 +81,8 @@ public enum SwitcherSections {
             .min { abs(cells[$0].midX - from.midX) < abs(cells[$1].midX - from.midX) }
     }
 
-    /// The section whose band (its header top → the next header top) holds `point`.
+    /// The space card under `point`, if any.
     public static func section(at point: CGPoint, layout: SectionLayout) -> Int? {
-        guard point.y >= 0, point.y < layout.size.height else { return nil }
-        return layout.headers.indices.last { layout.headers[$0].minY <= point.y }
+        layout.sections.firstIndex { $0.contains(point) }
     }
 }

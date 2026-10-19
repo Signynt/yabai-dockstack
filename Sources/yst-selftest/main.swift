@@ -980,14 +980,20 @@ do {
     check(s.map(\.space) == [1, 2, 3], "every space is a section, incl. empty, display order")
     check(s.map(\.name) == ["D1 · Space 1", "D1 · Space 2", "D2 · web"], "section names (display prefix when >1)")
     check(s.first?.items.map(\.id) == [5, 4], "MRU order kept inside a section")
+    let wide = SwitcherSections.layout(counts: [3, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
+                                       gap: 10, headerHeight: 20, emptyHeight: 30, maxWidth: 1000)
+    check(wide.sections.map(\.minX) == [0, 230, 350] && wide.size == CGSize(width: 450, height: 130),
+          "space cards flow left to right")
+    check(wide.cells[3] == CGRect(x: 350, y: 20, width: 100, height: 50), "cells placed inside their card")
     let l = SwitcherSections.layout(counts: [3, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
-                                    gap: 10, headerHeight: 20, emptyHeight: 30)
-    check(l.headers.map(\.minY) == [0, 140, 200] && l.size == CGSize(width: 210, height: 270), "section layout")
-    check(l.cells.count == 4 && l.cells[3] == CGRect(x: 0, y: 220, width: 100, height: 50), "cells placed per section")
+                                    gap: 10, headerHeight: 20, emptyHeight: 30, maxWidth: 300)
+    check(l.sections.map(\.origin) == [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 150), CGPoint(x: 120, y: 150)],
+          "cards wrap to a new row when out of width")
     check(SwitcherSections.verticalNeighbor(of: 2, up: true, cells: l.cells) == 0, "↑ to nearest cell above")
-    check(SwitcherSections.verticalNeighbor(of: 2, up: false, cells: l.cells) == 3, "↓ crosses an empty section")
+    check(SwitcherSections.verticalNeighbor(of: 2, up: false, cells: l.cells) == 3, "↓ into the next row of cards")
     check(SwitcherSections.verticalNeighbor(of: 3, up: false, cells: l.cells) == nil, "↓ at bottom stays")
-    check(SwitcherSections.section(at: CGPoint(x: 50, y: 160), layout: l) == 1, "drop on an empty section")
+    check(SwitcherSections.section(at: CGPoint(x: 50, y: 160), layout: l) == 1, "drop on an empty space card")
+    check(SwitcherSections.section(at: CGPoint(x: 250, y: 160), layout: l) == nil, "drop in a gap → nil")
     check(SwitcherSections.section(at: CGPoint(x: 50, y: 400), layout: l) == nil, "drop outside sections → nil")
 }
 

@@ -31,6 +31,14 @@ public final class SwitcherController {
     /// until it actually moves, so a stationary mouse can't hijack the
     /// keyboard selection when tracking areas rebuild.
     private var pointerGate: CGPoint?
+    /// Sticky (search) mode groups windows by space so they can be dragged
+    /// between spaces; nil in hold mode.
+    private var sections: [SwitcherSection]?
+    private var spaces: [SpaceInfo] = []
+    private var spaceLabels: [Int: String] = [:]
+
+    /// A window was dropped onto another space's section: (window id, space).
+    public var onDropToSpace: ((Int, Int) -> Void)?
 
     /// Fired whenever the panel closes for any reason; the app uses it to
     /// reset the key tap's machine (e.g. after a mouse-click commit mid-hold).
@@ -52,6 +60,12 @@ public final class SwitcherController {
         }
         panel.onClick = { [weak self] idx in self?.select(idx); self?.commit() }
         panel.onCloseItem = { [weak self] idx in self?.close(index: idx) }
+        panel.onDropToSpace = { [weak self] idx, space in
+            guard let self, self.items.indices.contains(idx) else { return }
+            let id = self.items[idx].id
+            self.hide()  // the SIP-free move needs the real window, not our panel, under the cursor
+            self.onDropToSpace?(id, space)
+        }
         panel.onKeyEvent = { [weak self] ev in self?.handleStickyKey(ev) ?? false }
         panel.onResignKey = { [weak self] in
             guard let self, self.sticky else { return }
@@ -92,12 +106,21 @@ public final class SwitcherController {
         self.sticky = sticky
         self.query = ""
         if lastWindows.isEmpty && sticky { lastWindows = client.queryWindows() }
+        if sticky {  // socket path, not the key tap: a synchronous query is fine here
+            spaces = client.querySpacesInfo()
+            spaceLabels = client.querySpaceLabels()
+        }
         rebuildItems()
         if items.isEmpty && !sticky { hide(); return false }
-        let firstIsCurrent = items.first.map { $0.id == mru.ids.first || $0.hasFocus } ?? false
-        selection = SwitcherModel.initialIndex(count: items.count,
+        // Start on the previous window by MRU, wherever its section put it.
+        let mruOrder = SwitcherModel.build(windows: lastWindows, mru: mru.ids, scope: scope, query: query)
+            .filter { !pendingCloseIDs.contains($0.id) }
+        let firstIsCurrent = mruOrder.first.map { $0.id == mru.ids.first || $0.hasFocus } ?? false
+        let start = SwitcherModel.initialIndex(count: mruOrder.count,
                                                firstIsCurrent: firstIsCurrent,
                                                backward: backward)
+        selection = mruOrder.indices.contains(start)
+            ? (items.firstIndex { $0.id == mruOrder[start].id } ?? 0) : 0
         render()
         refreshAsync()
         return true
@@ -111,6 +134,13 @@ public final class SwitcherController {
 
     public func move(dx: Int, dy: Int) {
         guard !items.isEmpty else { return }
+        if dy != 0, let frames = panel.cellFrames {  // sectioned: rows differ per section
+            if let n = SwitcherSections.verticalNeighbor(of: selection, up: dy < 0, cells: frames) {
+                selection = n
+                panel.updateSelection(selection)
+            }
+            return
+        }
         let cols = max(panel.columns, 1)
         var next = selection + dx + dy * cols
         if dy == 0 {
@@ -146,6 +176,13 @@ public final class SwitcherController {
         items = SwitcherModel.build(windows: lastWindows, mru: mru.ids,
                                     scope: scope, query: query)
             .filter { !pendingCloseIDs.contains($0.id) }
+        if sticky, !spaces.isEmpty {
+            let s = SwitcherSections.build(items: items, spaces: spaces, labels: spaceLabels)
+            sections = s
+            items = s.flatMap(\.items)
+        } else {
+            sections = nil
+        }
     }
 
     private func displayItems() -> [SwitcherDisplayItem] {
@@ -162,7 +199,8 @@ public final class SwitcherController {
         pointerGate = NSEvent.mouseLocation
         panel.show(items: displayItems(),
                    appearance: SwitcherAppearance(rawValue: config.switcherAppearance) ?? .thumbnails,
-                   selection: selection, query: query, keyboardFocus: sticky)
+                   selection: selection, query: query, keyboardFocus: sticky,
+                   sections: sections)
     }
 
     private func hide() {
@@ -220,10 +258,17 @@ public final class SwitcherController {
     private func refreshAsync() {
         generation += 1
         let gen = generation
+        let wantSpaces = sticky
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let wins = self.client.queryWindows()
-            DispatchQueue.main.async { self.applyRefresh(wins, generation: gen) }
+            let freshSpaces = wantSpaces ? self.client.querySpacesInfo() : nil
+            let freshLabels = wantSpaces ? self.client.querySpaceLabels() : nil
+            DispatchQueue.main.async {
+                if let freshSpaces, !freshSpaces.isEmpty { self.spaces = freshSpaces }
+                if let freshLabels { self.spaceLabels = freshLabels }
+                self.applyRefresh(wins, generation: gen)
+            }
             Task { [weak self] in
                 guard let self else { return }
                 let fresh = await self.capturer.captureOnScreen(windowIDs: Set(wins.map { $0.id }))

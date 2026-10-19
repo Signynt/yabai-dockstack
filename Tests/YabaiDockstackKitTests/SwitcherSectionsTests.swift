@@ -24,28 +24,38 @@ final class SwitcherSectionsTests: XCTestCase {
         XCTAssertEqual(SwitcherSections.build(items: [], spaces: one, labels: [:]).map(\.name), ["Space 1", "Space 2"])
     }
 
-    func testLayout() {
-        let l = SwitcherSections.layout(counts: [3, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
-                                        gap: 10, headerHeight: 20, emptyHeight: 30)
-        XCTAssertEqual(l.headers.map(\.minY), [0, 140, 200])
+    private func layout(maxWidth: Double) -> SectionLayout {
+        SwitcherSections.layout(counts: [3, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
+                                gap: 10, headerHeight: 20, emptyHeight: 30, maxWidth: maxWidth)
+    }
+
+    func testFlowLayoutOneRow() {
+        let l = layout(maxWidth: 1000)
+        XCTAssertEqual(l.sections, [CGRect(x: 0, y: 0, width: 210, height: 130),
+                                    CGRect(x: 230, y: 0, width: 100, height: 50),
+                                    CGRect(x: 350, y: 0, width: 100, height: 70)])
         XCTAssertEqual(l.cells, [CGRect(x: 0, y: 20, width: 100, height: 50),
                                  CGRect(x: 110, y: 20, width: 100, height: 50),
                                  CGRect(x: 0, y: 80, width: 100, height: 50),
-                                 CGRect(x: 0, y: 220, width: 100, height: 50)])
-        XCTAssertEqual(l.size, CGSize(width: 210, height: 270))
+                                 CGRect(x: 350, y: 20, width: 100, height: 50)])
+        XCTAssertEqual(l.size, CGSize(width: 450, height: 130))
+    }
+
+    func testFlowLayoutWraps() {
+        let l = layout(maxWidth: 300)
+        XCTAssertEqual(l.sections.map(\.origin), [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 150), CGPoint(x: 120, y: 150)])
+        XCTAssertEqual(l.size, CGSize(width: 220, height: 220))
     }
 
     func testVerticalNeighborAndSectionHit() {
-        let l = SwitcherSections.layout(counts: [3, 0, 1], columns: 2, cell: CGSize(width: 100, height: 50),
-                                        gap: 10, headerHeight: 20, emptyHeight: 30)
+        let l = layout(maxWidth: 300)
         XCTAssertEqual(SwitcherSections.verticalNeighbor(of: 2, up: true, cells: l.cells), 0)
         XCTAssertEqual(SwitcherSections.verticalNeighbor(of: 2, up: false, cells: l.cells), 3)
         XCTAssertNil(SwitcherSections.verticalNeighbor(of: 3, up: false, cells: l.cells))
-        XCTAssertEqual(SwitcherSections.verticalNeighbor(of: 1, up: false, cells: l.cells), 2)
-        XCTAssertEqual(SwitcherSections.section(at: CGPoint(x: 50, y: 160), layout: l), 1)  // empty section body
+        XCTAssertEqual(SwitcherSections.section(at: CGPoint(x: 50, y: 160), layout: l), 1)  // empty section
+        XCTAssertEqual(SwitcherSections.section(at: CGPoint(x: 130, y: 180), layout: l), 2)
         XCTAssertEqual(SwitcherSections.section(at: CGPoint(x: 50, y: 100), layout: l), 0)
-        XCTAssertEqual(SwitcherSections.section(at: CGPoint(x: 50, y: 260), layout: l), 2)
-        XCTAssertNil(SwitcherSections.section(at: CGPoint(x: 50, y: -5), layout: l))
+        XCTAssertNil(SwitcherSections.section(at: CGPoint(x: 250, y: 160), layout: l))      // gap
         XCTAssertNil(SwitcherSections.section(at: CGPoint(x: 50, y: 400), layout: l))
     }
 }
