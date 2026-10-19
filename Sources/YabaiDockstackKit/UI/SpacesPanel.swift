@@ -20,6 +20,9 @@ public final class SpacesPanel {
     public var onResignKey: (() -> Void)?
 
     public private(set) var isDragging = false
+    /// Space cards can only be dragged (swapped) with the scripting addition;
+    /// without it a card drag shows nothing at all.
+    public var spaceDragEnabled = false
     /// Tile frames in body coordinates, by window id (for ↑/↓).
     public private(set) var tileFrames: [Int: CGRect] = [:]
 
@@ -92,7 +95,9 @@ public final class SpacesPanel {
                     tv.isSelected = tile.item.id == selectedID
                     tv.onHover = { [weak self] in self?.onHover?($0) }
                     tv.onClose = { [weak self] in self?.onCloseItem?($0) }
-                    tv.onPress = { [weak self] phase, ev in self?.tilePressed(tile.item.id, card.space, phase, ev) }
+                    tv.onPress = { [weak self] phase, ev in
+                        self?.tilePressed(tile.item.id, card.space, draggable: !card.isFullscreen, phase, ev)
+                    }
                     view.addSubview(tv)
                     tiles[tile.item.id] = tv
                     tileSpace[tile.item.id] = card.space
@@ -159,11 +164,11 @@ public final class SpacesPanel {
 
     // MARK: - Drag & drop
 
-    private func tilePressed(_ id: Int, _ space: Int, _ phase: PressPhase, _ ev: NSEvent) {
+    private func tilePressed(_ id: Int, _ space: Int, draggable: Bool, _ phase: PressPhase, _ ev: NSEvent) {
         switch phase {
         case .click: onClick?(id)
         case .began:
-            guard let tv = tiles[id] else { return }
+            guard draggable, let tv = tiles[id] else { return }
             beginDrag(windowID: id, space: space, snapshotOf: tv, scale: 1)
         case .moved: moveDrag(ev)
         case .ended: finishDrag(ev)
@@ -174,7 +179,7 @@ public final class SpacesPanel {
         switch phase {
         case .click: onSpaceClick?(card.space)
         case .began:
-            guard !card.isFullscreen, let cv = cardViews[card.space] else { return }
+            guard spaceDragEnabled, !card.isFullscreen, let cv = cardViews[card.space] else { return }
             beginDrag(windowID: nil, space: card.space, snapshotOf: cv, scale: 0.6)
         case .moved: moveDrag(ev)
         case .ended: finishDrag(ev)
@@ -368,6 +373,7 @@ private final class SpacesTileView: PressTrackingView {
         pressEnabled = matches
         wantsLayer = true
         layer?.cornerRadius = 6
+        layer?.masksToBounds = true
         layer?.borderColor = NSColor.controlAccentColor.cgColor
         alphaValue = matches ? 1 : 0.25
         toolTip = tile.item.title.isEmpty ? tile.item.app : "\(tile.item.app) — \(tile.item.title)"
@@ -398,7 +404,7 @@ private final class SpacesTileView: PressTrackingView {
         label.frame = CGRect(x: iconSide + 8, y: (pillH - label.frame.height) / 2,
                              width: max(pill.frame.width - iconSide - 13, 0), height: label.frame.height)
         pill.addSubview(label)
-        addSubview(pill)
+        if SpacesInteraction.pillFits(frame.size) { addSubview(pill) }
 
         closeButton.bezelStyle = .circular
         closeButton.isBordered = false

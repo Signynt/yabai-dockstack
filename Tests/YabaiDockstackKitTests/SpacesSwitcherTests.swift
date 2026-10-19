@@ -66,4 +66,23 @@ final class SpacesSwitcherTests: XCTestCase {
         XCTAssertEqual(SpacesInteraction.cardClick(space: 4, saAvailable: false, recentWindowInSpace: 9), .focusWindow(9))
         XCTAssertEqual(SpacesInteraction.cardClick(space: 4, saAvailable: false, recentWindowInSpace: nil), .nothing)
     }
+
+    func testRecentWindowFallsBackToFirstTile() {
+        XCTAssertEqual(SpacesInteraction.recentWindow(inSpace: 2, mru: [9, 21], tilesInSpace: [22, 21]), 21)
+        XCTAssertEqual(SpacesInteraction.recentWindow(inSpace: 2, mru: [9], tilesInSpace: [22, 21]), 22)
+        XCTAssertNil(SpacesInteraction.recentWindow(inSpace: 2, mru: [9], tilesInSpace: []))
+    }
+
+    func testWindowMoveRules() {
+        XCTAssertTrue(SpacesInteraction.moveAllowed(from: 1, to: 2, fullscreen: []))
+        XCTAssertFalse(SpacesInteraction.moveAllowed(from: 1, to: 1, fullscreen: []))
+        XCTAssertFalse(SpacesInteraction.moveAllowed(from: 3, to: 2, fullscreen: [3]))
+        XCTAssertFalse(SpacesInteraction.moveAllowed(from: 1, to: 3, fullscreen: [3]))
+    }
+
+    func testPillOnlyOnTilesThatFitIt() {
+        XCTAssertTrue(SpacesInteraction.pillFits(CGSize(width: 80, height: 50)))
+        XCTAssertFalse(SpacesInteraction.pillFits(CGSize(width: 34, height: 19)))
+        XCTAssertFalse(SpacesInteraction.pillFits(CGSize(width: 24, height: 40)))
+    }
 }

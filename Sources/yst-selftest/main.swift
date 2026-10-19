@@ -1136,6 +1136,19 @@ do {
     check(set.switcherFollowMove && set.switcherWallpaperPath == "/tmp/w.heic", "follow-move / wallpaper keys load")
 }
 
+print("Spaces switcher: review fixes")
+check(SpacesInteraction.recentWindow(inSpace: 2, mru: [9, 21], tilesInSpace: [22, 21]) == 21
+      && SpacesInteraction.recentWindow(inSpace: 2, mru: [9], tilesInSpace: [22, 21]) == 22
+      && SpacesInteraction.recentWindow(inSpace: 2, mru: [9], tilesInSpace: []) == nil,
+      "card click: recent window by MRU, else the card's first window")
+check(SpacesInteraction.moveAllowed(from: 1, to: 2, fullscreen: [])
+      && !SpacesInteraction.moveAllowed(from: 1, to: 1, fullscreen: [])
+      && !SpacesInteraction.moveAllowed(from: 3, to: 2, fullscreen: [3])
+      && !SpacesInteraction.moveAllowed(from: 1, to: 3, fullscreen: [3]),
+      "window move: not out of / into a fullscreen space, not onto itself")
+check(SpacesInteraction.pillFits(CGSize(width: 80, height: 50)) && !SpacesInteraction.pillFits(CGSize(width: 34, height: 19))
+      && !SpacesInteraction.pillFits(CGSize(width: 24, height: 40)), "project pill only on tiles big enough for it")
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

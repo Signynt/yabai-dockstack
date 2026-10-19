@@ -31,4 +31,22 @@ public enum SpacesInteraction {
         if saAvailable { return .focusSpace(space) }
         return recentWindowInSpace.map(CardClick.focusWindow) ?? .nothing
     }
+
+    /// The space's most recently focused window; the MRU only knows windows
+    /// focused since launch, so fall back to the card's first window.
+    public static func recentWindow(inSpace space: Int, mru: [Int], tilesInSpace: [Int]) -> Int? {
+        let ids = Set(tilesInSpace)
+        return mru.first { ids.contains($0) } ?? tilesInSpace.first
+    }
+
+    /// A window can't be dragged out of or into a native-fullscreen space.
+    public static func moveAllowed(from source: Int, to target: Int, fullscreen: Set<Int>) -> Bool {
+        source != target && !fullscreen.contains(source) && !fullscreen.contains(target)
+    }
+
+    /// The project capsule needs room; on tiny tiles (many windows in one
+    /// space) it's left off — the tooltip still names the window.
+    public static func pillFits(_ tile: CGSize) -> Bool {
+        tile.width >= 44 && tile.height >= 34
+    }
 }
