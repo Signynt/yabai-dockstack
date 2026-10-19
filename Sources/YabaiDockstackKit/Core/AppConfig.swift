@@ -38,6 +38,8 @@ public struct AppConfig: Codable, Equatable {
     public var dockPreview: Bool
     /// Open the menu-bar window menu when the pointer rests on the status icon.
     public var menuOpenOnHover: Bool
+    /// Per-display window strip under the menu bar.
+    public var windowStrip: Bool
     /// UI language: "auto" (follow system), "en", "zh-Hant", or "ja".
     public var language: String
     /// Master toggle for the AltTab-style window switcher.
@@ -69,6 +71,7 @@ public struct AppConfig: Codable, Equatable {
         indicatorDragReorder: true,
         dockPreview: true,
         menuOpenOnHover: false,
+        windowStrip: false,
         language: "auto",
         switcherEnabled: true,
         switcherAppearance: "thumbnails",

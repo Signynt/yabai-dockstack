@@ -858,6 +858,9 @@ do {
           "is-native-fullscreen decoded")
 }
 
+check(!AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).windowStrip,
+      "window strip defaults off")
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

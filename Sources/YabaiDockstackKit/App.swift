@@ -121,7 +121,12 @@ public enum YabaiDockstack {
             renderer.update(stacks)
             dockController?.warmCache()
         }
-        coordinator.onWindows = { switcher.noteWindows($0) }
+        let strip = WindowStripController(client: client, focuser: focuser)
+        strip.setEnabled(config.windowStrip)
+        coordinator.onWindows = { windows in
+            switcher.noteWindows(windows)
+            strip.update(windows: windows)
+        }
         switcherTap.onOutput = { output in
             switch output {
             case let .activate(idx, backward):
@@ -180,6 +185,7 @@ public enum YabaiDockstack {
         }
         menu.onSelectWindow = { id in focusWindow(id) }
         menu.openOnHover = config.menuOpenOnHover
+        strip.onOverflowClick = { menu.openMenu() }
         menu.permissionWarning = {
             (config.dockPreview && !PermissionsHelper.allGranted)
                 ? L10n.t("ui.menu.grantPerms") : nil
@@ -223,6 +229,7 @@ public enum YabaiDockstack {
                 switcher.updateConfig(config)
                 ensureSwitcherTap()
                 menu.openOnHover = config.menuOpenOnHover
+                strip.setEnabled(config.windowStrip)
             },
             onLoginToggle: { enabled in _ = LoginItem.setEnabled(enabled) },
             loginIsEnabled: { LoginItem.isEnabled })

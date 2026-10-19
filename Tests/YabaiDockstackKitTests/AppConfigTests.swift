@@ -71,4 +71,8 @@ final class AppConfigTests: XCTestCase {
     func testMenuHoverDefaultsOff() {
         XCTAssertFalse(AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).menuOpenOnHover)
     }
+
+    func testWindowStripDefaultsOff() {
+        XCTAssertFalse(AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).windowStrip)
+    }
 }

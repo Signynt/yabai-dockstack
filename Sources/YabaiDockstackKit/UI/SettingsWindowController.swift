@@ -40,6 +40,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let dockPreviewCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let menuHoverCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let menuHoverHelp = NSTextField(labelWithString: "")
+    private let windowStripCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let windowStripHelp = NSTextField(wrappingLabelWithString: "")
     private let loginCheck = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     // Switcher tab
     private static let switcherAppearanceOrder = ["thumbnails", "icons", "titles"]
@@ -153,6 +155,10 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         menuHoverCheck.target = self; menuHoverCheck.action = #selector(changed)
         menuHoverHelp.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         menuHoverHelp.textColor = .secondaryLabelColor
+        windowStripCheck.target = self; windowStripCheck.action = #selector(changed)
+        windowStripHelp.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        windowStripHelp.textColor = .secondaryLabelColor
+        windowStripHelp.preferredMaxLayoutWidth = 340
         loginCheck.target = self; loginCheck.action = #selector(loginChanged)
 
         fullWidthPopup.target = self; fullWidthPopup.action = #selector(changed)
@@ -219,6 +225,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         dragReorderCheck.title = L10n.t("ui.appearance.dragReorder")
         dockPreviewCheck.title = L10n.t("ui.appearance.dockPreview")
         menuHoverCheck.title = L10n.t("ui.appearance.menuHover")
+        windowStripCheck.title = L10n.t("ui.appearance.windowStrip")
+        windowStripHelp.stringValue = L10n.t("ui.appearance.windowStripHelp")
         // Surface the existing open-menu hotkey so it's discoverable.
         let menuKey = configEngine?.loadBindingsOrDefault()
             .first { $0.actionID == "open-window-menu" && $0.enabled }?.hotkey
@@ -251,6 +259,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             [NSGridCell.emptyContentView, dockPreviewCheck],
             [NSGridCell.emptyContentView, menuHoverCheck],
             [NSGridCell.emptyContentView, menuHoverHelp],
+            [NSGridCell.emptyContentView, windowStripCheck],
+            [NSGridCell.emptyContentView, windowStripHelp],
             row(L10n.t("ui.appearance.fullWidthSide"), fullWidthPopup),
             row(L10n.t("ui.appearance.debounce"), debounceField),
             row(L10n.t("ui.appearance.poll"), pollField),
@@ -409,6 +419,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         dragReorderCheck.isEnabled = !config.indicatorClickThrough
         dockPreviewCheck.state = config.dockPreview ? .on : .off
         menuHoverCheck.state = config.menuOpenOnHover ? .on : .off
+        windowStripCheck.state = config.windowStrip ? .on : .off
         fullWidthPopup.selectItem(at: config.fullWidthSide == "right" ? 1 : 0)
         debounceField.integerValue = Int((config.debounceSeconds * 1000).rounded())
         pollField.integerValue = Int((config.pollSeconds * 1000).rounded())
@@ -443,6 +454,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         dragReorderCheck.isEnabled = !config.indicatorClickThrough
         config.dockPreview = dockPreviewCheck.state == .on
         config.menuOpenOnHover = menuHoverCheck.state == .on
+        config.windowStrip = windowStripCheck.state == .on
         config.fullWidthSide = fullWidthPopup.indexOfSelectedItem == 1 ? "right" : "left"
         // ms -> seconds, with sane floors
         config.debounceSeconds = max(0.0, Double(debounceField.integerValue) / 1000.0)
