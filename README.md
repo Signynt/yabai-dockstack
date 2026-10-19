@@ -38,6 +38,10 @@ It is a clean Swift rewrite — **not** a fork of stackline (which required Hamm
   VS Code / Cursor show the workspace, JetBrains the project, terminals the
   current folder. Used in the switcher, Dock previews, the window menu and the
   new window strip.
+- **Drag windows between spaces** — from the search switcher (now one card
+  per space, empty spaces included) or the window strip, drop a window on
+  another space to move it there; even from a space you're not on. Uses yabai's
+  scripting addition when present, otherwise works with SIP on.
 - **Window strip** (opt-in) — a strip under the menu bar on each display lists
   that display's windows with their space; click to jump.
 - **Hover to open** the window menu (opt-in).
@@ -102,6 +106,8 @@ Full history: [CHANGELOG.md](CHANGELOG.md) ·
   (VS Code workspace, JetBrains project, terminal folder) everywhere.
 - 📋 **Window strip** (opt-in): every window on a display, with its space,
   under that display's menu bar. **Hover-to-open** window menu (opt-in).
+- 🫳 **Drag windows between spaces** — in the search switcher (space cards) or
+  the window strip; works from any space, with or without SIP.
 - ✦ **Hyper Key** (opt-in): Caps Lock / right ⌘ / ⌥ / ⌃ acts as ⌃⌥⌘⇧.
 - 🖥️ Multi-monitor, all visible spaces.
 - ⌃⌘← ⌃⌘→ **Send to space hotkeys** — move windows left/right one space, or to
@@ -426,12 +432,28 @@ Both are off by default — turn them on in **Settings → Appearance**.
   is highlighted and the focused window outlined. Hover a chip for the full
   title and space, click to jump. With many windows the labels shorten, then
   only icons remain, then a **+N** chip opens the window menu. Drag **Window
-  strip size** in Settings to resize it. It hides over native-fullscreen
+  strip size** in Settings to resize it. **Drag a chip** onto another space's
+  section to move the window there (empty spaces open up as drop slots while
+  you drag). It hides over native-fullscreen
   spaces and may cover the top of windows — raise yabai's `top_padding` if
   you want it clear.
 - **Hover to open**: rest the pointer on the menu bar icon for ¼ s and the
   window menu opens. The menu also has a hotkey (Settings → Keyboard →
   "Open window menu").
+
+## Drag windows between spaces
+
+Mission Control only lets you drag windows *from the current* space. Open the
+**search switcher** (Settings → Switcher → "Search switcher" hotkey): windows
+are shown as one card per space — every space, empty ones too. Drag a window
+onto another card to move it there, including into the space you're on. The
+same works by dragging a chip in the window strip.
+
+- With yabai's scripting addition: the move is instant (`yabai -m window --space`).
+- With SIP on: the app focuses the window (jumping to its space) and walks it
+  over with the same simulated gesture as the send-to-space hotkeys — you'll see
+  it travel. Windows closed to the tray can't be moved this way.
+- You end up on the destination space with the moved window focused.
 
 ## Hyper Key
 

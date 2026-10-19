@@ -33,6 +33,9 @@ dock 預覽、視窗切換器、cmd-tab 替代、選單列、Mission Control 替
 - **依專案顯示標籤** —— 同一個 app 的多個視窗用專案名稱區分:VS Code / Cursor 顯示
   workspace、JetBrains 顯示專案、終端機顯示目前資料夾。套用在切換器、Dock 預覽、
   視窗選單和新的視窗列。
+- **拖曳視窗到其他 space** —— 在搜尋式切換器(現在每個 space 一張卡片,含空的 space)或
+  視窗列,把視窗拖到另一個 space 就會移過去,即使它不在目前的 space。有 yabai scripting
+  addition 時直接移動,SIP 開著也能用。
 - **視窗列**(選用)—— 每個螢幕的選單列下方列出該螢幕的所有視窗與所在 space,點一下跳轉。
 - **滑鼠停留自動展開**視窗選單(選用)。
 - **按住 ⌃ 拖曳**指示器圖示即可調整 stack 順序。
@@ -190,10 +193,22 @@ space 並聚焦。
   視窗:圖示+標籤(編輯器顯示專案名稱),space 之間以分隔線隔開;目前的 space 有底色、
   聚焦中的視窗有外框。滑鼠停在 chip 上顯示完整標題與 space,點一下跳轉。視窗太多時
   標籤先縮短、再只剩圖示,最後出現 **+N**(點了打開視窗選單)。在 Settings 拖曳
-  **視窗列大小** 即可調整尺寸。原生全螢幕 space 會自動隱藏;可能會蓋住視窗頂端——
+  **視窗列大小** 即可調整尺寸。把 **chip 拖到** 另一個 space 的區段即可移動視窗(拖曳時空的
+  space 會展開成放置區)。原生全螢幕 space 會自動隱藏;可能會蓋住視窗頂端——
   需要的話調高 yabai 的 `top_padding`。
 - **滑鼠停留展開**:游標停在選單列圖示上 ¼ 秒就展開視窗選單。選單也有快捷鍵
   (Settings → Keyboard →「Open window menu」)。
+
+## 拖曳視窗到其他 space
+
+Mission Control 只能把**目前** space 的視窗拖走。打開**搜尋式切換器**(Settings → Switcher
+→「搜尋式切換器」熱鍵):視窗以「每個 space 一張卡片」顯示,空的 space 也在。把視窗拖到
+另一張卡片就移過去,也能拖進你目前所在的 space。在視窗列拖曳 chip 也一樣。
+
+- 有 yabai scripting addition:直接移動(`yabai -m window --space`)。
+- SIP 開著:app 會先 focus 該視窗(跳到它的 space),再用和「移到 space」快捷鍵相同的模擬
+  手勢帶過去——你會看到它移動的過程。縮到系統匣的視窗無法用這種方式移動。
+- 結束時停在目標 space,並 focus 被移動的視窗。
 
 ## Hyper Key
 

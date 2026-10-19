@@ -5,6 +5,13 @@ the [GitHub Releases](https://github.com/z20240/yabai-dockstack/releases) page.
 
 ## v0.3.0 — 2026-10-19
 
+- **Drag windows between spaces** — the search switcher now shows one card per
+  space (empty spaces included) and the window strip opens empty spaces as drop
+  slots while dragging; drop a window on another space to move it there, even
+  from a space you're not on. Scripting addition → `yabai -m window --space`;
+  SIP on → focus the window and walk it over with the simulated gesture. You end
+  on the destination space with the window focused. The search switcher's
+  hotkey can now be recorded on the Switcher tab.
 - **Project-aware window labels** — windows of the same app are labelled by
   what tells them apart: VS Code / Cursor / Windsurf → workspace, JetBrains →
   project, terminals → current folder, otherwise the part of the title that
