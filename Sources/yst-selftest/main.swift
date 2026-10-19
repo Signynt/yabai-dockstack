@@ -1080,6 +1080,54 @@ do {
           "scratchpad windows are not displayable")
 }
 
+print("Spaces switcher: cards, nav, interaction")
+do {
+    func win(_ id: Int, space: Int, display: Int = 1, stack: Int = 0) -> YabaiWindow {
+        YabaiWindow(id: id, pid: id, app: "A", title: "t\(id)", frame: YRect(x: 0, y: 0, w: 200, h: 100),
+                    display: display, space: space, stackIndex: stack, hasFocus: false)
+    }
+    let spaces = [SpaceInfo(index: 1, display: 1, isVisible: true, hasFocus: true),
+                  SpaceInfo(index: 2, display: 1, isVisible: false),
+                  SpaceInfo(index: 3, display: 2, isVisible: true, isNativeFullscreen: true)]
+    let windows = [win(11, space: 1, stack: 1), win(12, space: 1, stack: 0), win(31, space: 3, display: 2)]
+    let items = windows.map { SwitcherItem(id: $0.id, pid: $0.pid, app: $0.app, title: $0.title, space: $0.space,
+                                           display: $0.display, hasFocus: false) }
+    let cards = SpacesSwitcherModel.build(items: items, windows: windows, spaces: spaces,
+                                          labels: [2: "web"], matching: [11, 31])
+    check(cards.map(\.space) == [1, 2, 3] && cards.map(\.name) == ["Space 1", "web", "Space 3"],
+          "cards: every space incl. empty + fullscreen, display order, label names")
+    check(cards[0].tiles.map(\.item.id) == [12, 11] && cards[0].tiles.map(\.matches) == [false, true]
+          && cards[0].tiles.first?.aspect == 2, "tiles: stack order, query matches, aspect")
+    check(cards[2].isFullscreen && cards[0].hasFocus && cards[1].tiles.isEmpty, "cards: fullscreen / focus flags")
+    check(SpacesSwitcherModel.selectable(cards).map(\.id) == [11, 31], "only matching tiles are selectable")
+
+    let rects = [CGRect(x: 0, y: 0, width: 100, height: 50), CGRect(x: 120, y: 0, width: 100, height: 50),
+                 CGRect(x: 10, y: 80, width: 100, height: 50)]
+    check(SpatialNav.neighbor(of: 1, up: false, rects: rects) == 2, "↓ to the tile below")
+    check(SpatialNav.neighbor(of: 2, up: true, rects: rects) == 0, "↑ prefers the tile nearest in x")
+    check(SpatialNav.neighbor(of: 0, up: true, rects: rects) == nil && SpatialNav.neighbor(of: 9, up: true, rects: rects) == nil,
+          "↑ at the top / bad index → nil")
+
+    let cardRects = [(space: 1, rect: CGRect(x: 0, y: 0, width: 100, height: 100), isFullscreen: false),
+                     (space: 3, rect: CGRect(x: 120, y: 0, width: 100, height: 100), isFullscreen: true)]
+    check(SpacesInteraction.dropTarget(at: CGPoint(x: 50, y: 50), cards: cardRects, visible: nil) == 1, "drop on a card")
+    check(SpacesInteraction.dropTarget(at: CGPoint(x: 150, y: 50), cards: cardRects, visible: nil) == nil,
+          "fullscreen card isn't a drop target")
+    check(SpacesInteraction.dropTarget(at: CGPoint(x: 110, y: 50), cards: cardRects, visible: nil) == nil, "drop in a gap → nil")
+    check(SpacesInteraction.dropTarget(at: CGPoint(x: 50, y: 50), cards: cardRects,
+                                       visible: CGRect(x: 0, y: 60, width: 300, height: 100)) == nil,
+          "scrolled-away card isn't a drop target")
+    check(SpacesInteraction.swapAllowed(source: 1, target: 2, saAvailable: true, fullscreen: [])
+          && !SpacesInteraction.swapAllowed(source: 1, target: 1, saAvailable: true, fullscreen: [])
+          && !SpacesInteraction.swapAllowed(source: 1, target: 2, saAvailable: false, fullscreen: [])
+          && !SpacesInteraction.swapAllowed(source: 1, target: 3, saAvailable: true, fullscreen: [3]),
+          "space swap: SA only, not onto itself or a fullscreen space")
+    check(SpacesInteraction.cardClick(space: 4, saAvailable: true, recentWindowInSpace: nil) == .focusSpace(4)
+          && SpacesInteraction.cardClick(space: 4, saAvailable: false, recentWindowInSpace: 9) == .focusWindow(9)
+          && SpacesInteraction.cardClick(space: 4, saAvailable: false, recentWindowInSpace: nil) == .nothing,
+          "card click: SA focuses the space, else its recent window, else nothing")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }
