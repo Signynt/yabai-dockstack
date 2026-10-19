@@ -41,6 +41,10 @@ dock 預覽、視窗切換器、cmd-tab 替代、選單列、Mission Control 替
 - **滑鼠停留自動展開**視窗選單(選用)。
 - **按住 ⌃ 拖曳**指示器圖示即可調整 stack 順序。
 - **Hyper Key**(選用)—— Caps Lock 或右側修飾鍵變成 ⌃⌥⌘⇧。
+- **自動調整 yabai 的 padding**(選用)—— padding 太小時,指示器和視窗列不再壓到 App:
+  依它們的大小即時設定 yabai 的左右和上方 padding(只在執行中套用,不改 yabairc)。
+- **Dock 預覽**改用和切換器相同的毛玻璃面板(感謝 @Signynt,#5)。
+- 選單列選單新增 **重新啟動 yabai-dockstack**。
 - **修正**縮到系統匣 / 選單列的 app(Gather、Surfshark…)點預覽打不開的問題。
 
 完整紀錄:[CHANGELOG.md](CHANGELOG.md) ·
@@ -101,6 +105,10 @@ dock 預覽、視窗切換器、cmd-tab 替代、選單列、Mission Control 替
 **Hyper Key** —— 把 Caps Lock(或右側修飾鍵)變成 ⌃⌥⌘⇧。
 
 <img src="assets/demo-hyper-key.jpg" width="380" alt="Hyper Key 設定" />
+
+**自動調整 yabai 的 padding** —— Settings → Appearance;指示器和視窗列有自己的空間,不再壓到 App。
+
+<img src="assets/demo-auto-padding.jpg" width="380" alt="Settings → Appearance 的自動調整 yabai padding 選項" />
 
 ## 需求
 

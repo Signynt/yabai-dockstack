@@ -48,6 +48,11 @@ It is a clean Swift rewrite — **not** a fork of stackline (which required Hamm
 - **Hover to open** the window menu (opt-in).
 - **⌃-drag to reorder** a stack from its indicator.
 - **Hyper Key** (opt-in) — Caps Lock or a right-hand modifier becomes ⌃⌥⌘⇧.
+- **Auto-adjust yabai padding** (opt-in) — no more indicators or window strip
+  covering apps when your padding is tight: yabai's left/right/top padding is
+  sized to them live (runtime only, your yabairc is untouched).
+- **Dock previews** use the same frosted panel as the switcher (thanks @Signynt, #5).
+- **Restart yabai-dockstack** from the menu bar menu.
 - **Fixed** clicking a preview of apps that close to the tray / menu bar
   (Gather, Surfshark…) — the app's window now comes back.
 
@@ -110,6 +115,11 @@ instant — see [@Signynt's demo](#drag-windows-between-spaces).
 **Hyper Key** — Caps Lock (or a right-hand modifier) as ⌃⌥⌘⇧.
 
 <img src="assets/demo-hyper-key.jpg" width="380" alt="Hyper Key settings" />
+
+**Auto-adjust yabai padding** — Settings → Appearance; indicators and the window
+strip get room of their own.
+
+<img src="assets/demo-auto-padding.jpg" width="380" alt="the Auto-adjust yabai padding option in Settings → Appearance" />
 
 ## Features
 
