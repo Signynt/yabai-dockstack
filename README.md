@@ -88,6 +88,29 @@ Full history: [CHANGELOG.md](CHANGELOG.md) ·
 
 <img src="assets/demo-drag-reorder.gif" width="128" alt="control-drag an indicator icon to reorder the stack" />
 
+**Search switcher** — open it with your "Search switcher" hotkey (Settings →
+Switcher): every space as a mini desktop, grouped by display.
+
+<img src="assets/demo-search-switcher.jpg" width="760" alt="search switcher: every space as a mini desktop with its windows, grouped by display" />
+
+**Type to filter** — windows that don't match dim in place.
+
+<img src="assets/demo-search-filter.gif" width="760" alt="typing in the search switcher dims the windows that don't match" />
+
+**Drag windows between spaces** — even from a space you're not on. With SIP on
+the window is walked over (shown here); with yabai's scripting addition it's
+instant — see [@Signynt's demo](#drag-windows-between-spaces).
+
+<img src="assets/demo-drag-to-space.gif" width="760" alt="dragging a window onto another space in the search switcher" />
+
+**…or from the window strip** — drop a chip on another space.
+
+<img src="assets/demo-strip-drag-to-space.gif" width="760" alt="dragging a window-strip chip onto another space" />
+
+**Hyper Key** — Caps Lock (or a right-hand modifier) as ⌃⌥⌘⇧.
+
+<img src="assets/demo-hyper-key.jpg" width="380" alt="Hyper Key settings" />
+
 ## Features
 
 - 🔄 **AltTab-style window switcher**: hold **⌥** + tap **Tab** to cycle every
@@ -478,6 +501,11 @@ focus a window; clicking an empty part of a card goes to that space.
     destination space. Windows closed to the tray can't be moved this way.
 - **Drag a whole space** onto another to swap their windows. **Requires the
   scripting addition**; with SIP on, dragging a space does nothing.
+- With the scripting addition, moves and swaps look like this (video by
+  @Signynt, from #4):
+
+https://github.com/user-attachments/assets/2ed311f6-c563-4742-a8aa-2d875b0b4ad8
+
 - Optional wallpaper behind the cards (Settings → Switcher; pick a light and a
   dark image).
 

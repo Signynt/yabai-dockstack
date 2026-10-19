@@ -80,6 +80,28 @@ dock 預覽、視窗切換器、cmd-tab 替代、選單列、Mission Control 替
 
 <img src="assets/demo-drag-reorder.gif" width="128" alt="按住 ctrl 拖曳指示器圖示調整 stack 順序" />
 
+**搜尋式切換器** —— 用你設定的「搜尋式切換器」熱鍵打開(Settings → Switcher):每個 space
+顯示成一張迷你桌面,依顯示器分組。
+
+<img src="assets/demo-search-switcher.jpg" width="760" alt="搜尋式切換器:每個 space 是一張迷你桌面,依顯示器分組" />
+
+**打字篩選** —— 不符合的視窗會在原位變淡。
+
+<img src="assets/demo-search-filter.gif" width="760" alt="在搜尋式切換器打字,不符合的視窗變淡" />
+
+**拖曳視窗到其他 space** —— 即使它不在目前的 space。SIP 開著時會跳過去再走回來(如圖);
+有 yabai scripting addition 時瞬間完成——見 [@Signynt 的示範](#拖曳視窗到其他-space)。
+
+<img src="assets/demo-drag-to-space.gif" width="760" alt="在搜尋式切換器把視窗拖到另一個 space" />
+
+**也可以從視窗列拖** —— 把 chip 拖到另一個 space。
+
+<img src="assets/demo-strip-drag-to-space.gif" width="760" alt="把視窗列的 chip 拖到另一個 space" />
+
+**Hyper Key** —— 把 Caps Lock(或右側修飾鍵)變成 ⌃⌥⌘⇧。
+
+<img src="assets/demo-hyper-key.jpg" width="380" alt="Hyper Key 設定" />
+
 ## 需求
 
 - macOS 14+
@@ -221,6 +243,10 @@ focus 視窗;點卡片的空白處會跳到那個 space。
     的視窗無法用這種方式移動。
 - **拖曳整個 space** 到另一個 space 會交換兩邊的視窗。**需要 scripting addition**;SIP
   開著時拖曳 space 沒有作用。
+- 有 scripting addition 時,移動和交換的樣子(影片由 @Signynt 錄製,來自 #4):
+
+https://github.com/user-attachments/assets/2ed311f6-c563-4742-a8aa-2d875b0b4ad8
+
 - 可選擇在卡片後面顯示桌布(Settings → Switcher,可分別指定淺色和深色圖片)。
 
 ## Hyper Key
