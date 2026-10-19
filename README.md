@@ -77,7 +77,7 @@ Full history: [CHANGELOG.md](CHANGELOG.md) ·
 
 **Window strip** — each display's windows and their spaces, under the menu bar.
 
-<img src="assets/demo-window-strip.jpg" width="760" alt="per-display window strip under the menu bar" />
+<img src="assets/demo-window-strip.jpg" width="628" alt="per-display window strip under the menu bar" />
 
 **⌃-drag to reorder a stack** — straight from its indicator.
 

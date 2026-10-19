@@ -70,7 +70,7 @@ dock 預覽、視窗切換器、cmd-tab 替代、選單列、Mission Control 替
 
 **視窗列** —— 選單列下方顯示每個螢幕的視窗與所在 space。
 
-<img src="assets/demo-window-strip.jpg" width="760" alt="每個螢幕選單列下方的視窗列" />
+<img src="assets/demo-window-strip.jpg" width="628" alt="每個螢幕選單列下方的視窗列" />
 
 **按住 ⌃ 拖曳調整 stack 順序** —— 直接在指示器上操作。
 
