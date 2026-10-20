@@ -28,7 +28,7 @@ public enum SignalInstaller {
         events.map { event in
             Spec(event: event,
                  label: label(for: event),
-                 action: "\"\(appBinaryPath)\" --refresh")
+                 action: "\"\(appBinaryPath)\" \(event == "space_changed" ? "--space-changed" : "--refresh")")
         }
     }
 

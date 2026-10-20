@@ -19,6 +19,7 @@ public final class SwitcherController {
     private var lastWindows: [YabaiWindow] = []
     private var items: [SwitcherItem] = []
     private var selection = 0
+    private var highlightedID: Int?
     private var scope: SwitcherScope = .allWindows
     private var sticky = false
     private var query = ""
@@ -81,7 +82,16 @@ public final class SwitcherController {
         }
         spacesPanel.onHover = { [weak self] id in
             guard let self, let idx = self.items.firstIndex(where: { $0.id == id }) else { return }
-            self.panel.onHover?(idx)
+            self.highlightedID = id
+            self.select(idx)
+            self.spacesPanel.updateSelection(id)
+        }
+        spacesPanel.onHoverExit = { [weak self] id in
+            guard let self else { return }
+            self.pointerGate = nil
+            guard self.highlightedID == id else { return }
+            self.highlightedID = nil
+            self.spacesPanel.updateSelection(nil)
         }
         spacesPanel.onClick = { [weak self] id in
             guard let self, let idx = self.items.firstIndex(where: { $0.id == id }) else { return }
@@ -157,11 +167,6 @@ public final class SwitcherController {
         self.sticky = sticky
         if sticky { panel.hide() } else { spacesPanel.hide() }  // never both on screen
         self.query = ""
-        if lastWindows.isEmpty && sticky { lastWindows = displayableWindows(client.queryWindows()) }
-        if sticky {  // socket path, not the key tap: a synchronous query is fine here
-            spaces = client.querySpacesInfo()
-            spaceLabels = client.querySpaceLabels()
-        }
         rebuildItems()
         if items.isEmpty && !sticky { hide(); return false }
         // Start on the previous window by MRU, wherever its section put it.
@@ -173,6 +178,7 @@ public final class SwitcherController {
                                                backward: backward)
         selection = mruOrder.indices.contains(start)
             ? (items.firstIndex { $0.id == mruOrder[start].id } ?? 0) : 0
+        highlightedID = items.indices.contains(selection) ? items[selection].id : nil
         render()
         refreshAsync()
         return true
@@ -262,7 +268,7 @@ public final class SwitcherController {
                                     uniquingKeysWith: { a, _ in a })
             spacesPanel.spaceDragEnabled = saAvailable
             spacesPanel.show(cards: cards, thumbnails: thumbs, wallpaper: config.switcherWallpaper ? wallpaper : nil,
-                             query: query, selectedID: items.indices.contains(selection) ? items[selection].id : nil)
+                             query: query, selectedID: highlightedID)
         } else {
             panel.show(items: displayItems(),
                        appearance: SwitcherAppearance(rawValue: config.switcherAppearance) ?? .thumbnails,
@@ -289,7 +295,8 @@ public final class SwitcherController {
 
     private func showSelection() {
         if cards != nil {
-            spacesPanel.updateSelection(items.indices.contains(selection) ? items[selection].id : nil)
+            highlightedID = items.indices.contains(selection) ? items[selection].id : nil
+            spacesPanel.updateSelection(highlightedID)
         } else {
             panel.updateSelection(selection)
         }
@@ -348,6 +355,10 @@ public final class SwitcherController {
     /// The space you're on changed (e.g. a swipe) while the panel is open.
     public func noteActiveSpaceChanged() {
         guard spacesPanel.isVisible else { return }
+        // Space changes can make the window server briefly revoke key status.
+        // Keep the sticky search switcher alive while its cards are refreshed.
+        ignoreResignUntil = Date().addingTimeInterval(0.5)
+        spacesPanel.regainKey()
         refreshAsync()
     }
 
@@ -455,6 +466,7 @@ public final class SwitcherController {
             switch ev.keyCode {
             case 0x0D: closeSelected(); return true    // ⌘W
             case 0x0C: quitSelected(); return true     // ⌘Q
+            case 0x33: query = ""; queryChanged(); return true // ⌘⌫
             default: return false
             }
         }
@@ -468,7 +480,12 @@ public final class SwitcherController {
         case 0x7E: move(dx: 0, dy: -1); return true
         case 0x7D: move(dx: 0, dy: 1); return true
         case 0x33:                                               // backspace edits search
-            if !query.isEmpty { query.removeLast(); queryChanged() }
+            if ev.modifierFlags.contains(.option) {
+                deleteSearchWord()
+            } else if !query.isEmpty {
+                query.removeLast()
+                queryChanged()
+            }
             return true
         default:
             guard !ev.modifierFlags.contains(.command),
@@ -479,6 +496,17 @@ public final class SwitcherController {
             queryChanged()
             return true
         }
+    }
+
+    private func deleteSearchWord() {
+        guard !query.isEmpty else { return }
+        while let last = query.last, last.isWhitespace {
+            query.removeLast()
+        }
+        while let last = query.last, !last.isWhitespace {
+            query.removeLast()
+        }
+        queryChanged()
     }
 
     private func queryChanged() {
