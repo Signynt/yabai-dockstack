@@ -32,29 +32,20 @@ dock preview, window switcher, cmd-tab replacement, menu bar, Mission Control al
 
 It is a clean Swift rewrite — **not** a fork of stackline (which required Hammerspoon).
 
-## What's new — v0.3.0
+## What's new — v0.3.1
 
-- **Project-aware labels** — same-app windows are told apart by project:
-  VS Code / Cursor show the workspace, JetBrains the project, terminals the
-  current folder. Used in the switcher, Dock previews, the window menu and the
-  new window strip.
-- **Spaces-style search switcher** (from @Signynt's Spaces View, #4) — every
-  space as a mini desktop with its windows; drag a window onto another space to
-  move it there, even from a space you're not on (also from the window strip).
-  Uses yabai's scripting addition when present, otherwise works with SIP on.
-  Dragging a whole space to swap windows needs the scripting addition.
-- **Window strip** (opt-in) — a strip under the menu bar on each display lists
-  that display's windows with their space; click to jump.
-- **Hover to open** the window menu (opt-in).
-- **⌃-drag to reorder** a stack from its indicator.
-- **Hyper Key** (opt-in) — Caps Lock or a right-hand modifier becomes ⌃⌥⌘⇧.
-- **Auto-adjust yabai padding** (opt-in) — no more indicators or window strip
-  covering apps when your padding is tight: yabai's left/right/top padding is
-  sized to them live (runtime only, your yabairc is untouched).
-- **Dock previews** use the same frosted panel as the switcher (thanks @Signynt, #5).
-- **Restart yabai-dockstack** from the menu bar menu.
-- **Fixed** clicking a preview of apps that close to the tray / menu bar
-  (Gather, Surfshark…) — the app's window now comes back.
+- **Pin windows on top** (#7, needs yabai's scripting addition) — a Window Rules
+  mode keeps an app above other windows, and a shortcut pins / unpins the
+  focused window.
+- **Window strip** — follows light / dark mode, shows empty spaces as small
+  slots, drags across displays (a copy of the chip follows the pointer), and
+  closes a window from its hover ✕.
+- **Search switcher** (thanks @Signynt, #6) — the hotkey toggles it, it stays
+  open across space changes and opens faster; ⌘⌫ / ⌥⌫ edit the search.
+
+New in v0.3.0: the Spaces-style search switcher, drag windows between spaces,
+project-aware labels, the window strip, Hyper Key and auto yabai padding — see
+the changelog.
 
 Full history: [CHANGELOG.md](CHANGELOG.md) ·
 [Releases](https://github.com/z20240/yabai-dockstack/releases)
@@ -138,8 +129,11 @@ strip get room of their own.
   to reorder the stack.
 - 🏷️ **Project-aware labels**: windows of the same app are labelled by project
   (VS Code workspace, JetBrains project, terminal folder) everywhere.
-- 📋 **Window strip** (opt-in): every window on a display, with its space,
-  under that display's menu bar. **Hover-to-open** window menu (opt-in).
+- 📋 **Window strip** (opt-in): every window on a display, with its space
+  (empty spaces too), under that display's menu bar; hover ✕ to close, drag to
+  another space or display. **Hover-to-open** window menu (opt-in).
+- 📌 **Pin windows on top** — per app (Window Rules) or with a shortcut; needs
+  yabai's scripting addition.
 - 🫳 **Drag windows between spaces** — in the Spaces-style search switcher or
   the window strip; works from any space, with or without SIP.
 - ✦ **Hyper Key** (opt-in): Caps Lock / right ⌘ / ⌥ / ⌃ acts as ⌃⌥⌘⇧.

@@ -28,24 +28,17 @@ dock 預覽、視窗切換器、cmd-tab 替代、選單列、Mission Control 替
 
 這是用 Swift 重寫的乾淨版本,**不是** stackline 的 fork(stackline 需要 Hammerspoon)。
 
-## 最新變更 — v0.3.0
+## 最新變更 — v0.3.1
 
-- **依專案顯示標籤** —— 同一個 app 的多個視窗用專案名稱區分:VS Code / Cursor 顯示
-  workspace、JetBrains 顯示專案、終端機顯示目前資料夾。套用在切換器、Dock 預覽、
-  視窗選單和新的視窗列。
-- **Spaces 風格的搜尋式切換器**(來自 @Signynt 的 Spaces View,#4)—— 每個 space 顯示成
-  迷你桌面和裡面的視窗;把視窗拖到另一個 space 就會移過去,即使它不在目前的 space
-  (視窗列也可以拖)。有 yabai scripting addition 時直接移動,SIP 開著也能用。
-  拖曳整個 space 交換視窗需要 scripting addition。
-- **視窗列**(選用)—— 每個螢幕的選單列下方列出該螢幕的所有視窗與所在 space,點一下跳轉。
-- **滑鼠停留自動展開**視窗選單(選用)。
-- **按住 ⌃ 拖曳**指示器圖示即可調整 stack 順序。
-- **Hyper Key**(選用)—— Caps Lock 或右側修飾鍵變成 ⌃⌥⌘⇧。
-- **自動調整 yabai 的 padding**(選用)—— padding 太小時,指示器和視窗列不再壓到 App:
-  依它們的大小即時設定 yabai 的左右和上方 padding(只在執行中套用,不改 yabairc)。
-- **Dock 預覽**改用和切換器相同的毛玻璃面板(感謝 @Signynt,#5)。
-- 選單列選單新增 **重新啟動 yabai-dockstack**。
-- **修正**縮到系統匣 / 選單列的 app(Gather、Surfshark…)點預覽打不開的問題。
+- **視窗置頂**(#7,需要 yabai scripting addition)—— Window Rules 新增模式,讓某個 app
+  永遠浮在其他視窗上面;也有快捷鍵可以置頂 / 取消置頂目前的視窗。
+- **視窗列** —— 跟著系統亮色 / 暗色切換;空的 space 也會顯示成小格子;可以跨螢幕拖曳
+  (拖曳時有個標籤分身跟著游標);hover 出現 ✕ 可直接關閉視窗。
+- **搜尋式切換器**(感謝 @Signynt,#6)—— 快捷鍵改成開 / 關切換,切換 space 時不會關閉,
+  開啟更快;⌘⌫ 清空搜尋、⌥⌫ 刪除一個字。
+
+v0.3.0 新增的 Spaces 風格搜尋式切換器、拖曳視窗到其他 space、依專案顯示標籤、視窗列、
+Hyper Key 和自動調整 padding,請見 changelog。
 
 完整紀錄:[CHANGELOG.md](CHANGELOG.md) ·
 [Releases](https://github.com/z20240/yabai-dockstack/releases)

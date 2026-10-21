@@ -3,6 +3,32 @@
 All notable changes to yabai-dockstack. Full release notes and downloads live on
 the [GitHub Releases](https://github.com/z20240/yabai-dockstack/releases) page.
 
+## v0.3.1 — 2026-10-22
+
+- **Pin windows on top** (#7) — needs yabai's scripting addition:
+  - a new Window Rules mode, **Float & pin on top**, keeps an app's windows
+    floating above the others (`manage=off sub-layer=above`);
+  - a **Pin / unpin window on top** shortcut (Keyboard → Shared, unbound by
+    default) toggles the focused window; a tiled window is floated while pinned
+    and re-tiled when unpinned. Without the scripting addition it does nothing.
+- **Window strip**:
+  - follows light / dark mode (same frosted material as the switcher);
+  - empty spaces show as small named slots, so you can see which space each
+    window is in, and every display with spaces gets a strip;
+  - drag a window onto **another display's** strip to move it there; a copy of
+    the chip follows the pointer while dragging;
+  - hover a window for a ✕ to close it;
+  - drops follow the same rule as the search switcher: with the scripting
+    addition the move is instant unless "follow the window" is on.
+- **Search switcher** (thanks @Signynt, #6):
+  - its hotkey now toggles it open / closed;
+  - it stays open when the space changes, opens faster, and marks the current
+    space sooner;
+  - ⌘⌫ clears the search, ⌥⌫ deletes a word;
+  - a tighter selection highlight that clears when the pointer leaves a window
+    (Enter / ⌘W / ⌘Q then do nothing until something is highlighted again), and
+    a pointer resting where the switcher opens no longer steals the selection.
+
 ## v0.3.0 — 2026-10-20
 
 - **Spaces-style search switcher & drag windows between spaces** (based on
