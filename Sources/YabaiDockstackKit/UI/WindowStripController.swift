@@ -481,6 +481,7 @@ private final class StripChip: NSView {
     var onDrag: ((_ windowId: Int, _ phase: DragPhase) -> Void)?
     private var pressPoint: NSPoint?
     private var dragging = false
+    private var ghost: StripDragGhost?
 
     private func overClose(_ event: NSEvent) -> Bool {
         !closeView.isHidden && closeView.frame.contains(convert(event.locationInWindow, from: nil))
@@ -497,9 +498,14 @@ private final class StripChip: NSView {
         if !dragging {
             guard abs(p.x - start.x) + abs(p.y - start.y) > 4 else { return }
             dragging = true
-            alphaValue = 0.4
+            // The ✕ isn't part of what's being dragged.
+            closeView.isHidden = true
+            iconView.isHidden = false
+            ghost = StripDragGhost(of: self, grabbedAt: convert(start, from: nil))
+            alphaValue = 0.5
             onDrag?(chip.id, .began)
         }
+        ghost?.follow(NSEvent.mouseLocation)
         onDrag?(chip.id, .moved)
     }
     override func mouseUp(with event: NSEvent) {
@@ -507,6 +513,8 @@ private final class StripChip: NSView {
         pressPoint = nil
         if dragging {
             dragging = false
+            ghost?.close()
+            ghost = nil
             alphaValue = 1
             onDrag?(chip.id, .ended)
         } else if overClose(event) {
@@ -520,8 +528,57 @@ private final class StripChip: NSView {
     /// will ever come, so drop the tooltip when the chip leaves its window.
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         super.viewWillMove(toWindow: newWindow)
-        if newWindow == nil { StripTooltip.hide(owner: self) }
+        if newWindow == nil {
+            StripTooltip.hide(owner: self)
+            ghost?.close()
+            ghost = nil
+        }
     }
+}
+
+/// A copy of the dragged chip that follows the pointer, across displays too,
+/// so it's always clear what is being dragged and where it is.
+private final class StripDragGhost {
+    private let panel: NSPanel
+    private let grab: NSPoint
+
+    init(of chip: NSView, grabbedAt grab: NSPoint) {
+        self.grab = grab
+        let size = chip.bounds.size
+        let image = NSImage(size: size)
+        if let rep = chip.bitmapImageRepForCachingDisplay(in: chip.bounds) {
+            chip.cacheDisplay(in: chip.bounds, to: rep)
+            image.addRepresentation(rep)
+        }
+        panel = NSPanel(contentRect: NSRect(origin: .zero, size: size),
+                        styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.level = .popUpMenu
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = true
+        panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        let shell = RoundedPanelView(frame: NSRect(origin: .zero, size: size), radius: chip.layer?.cornerRadius ?? 5)
+        let effect = NSVisualEffectView(frame: shell.bounds)
+        effect.material = .hudWindow
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        let iv = NSImageView(frame: shell.bounds)
+        iv.image = image
+        effect.addSubview(iv)
+        shell.addSubview(effect)
+        panel.contentView = shell
+        panel.alphaValue = 0.9
+        follow(NSEvent.mouseLocation)
+        panel.orderFrontRegardless()
+    }
+
+    /// Keeps the point where the chip was grabbed under the pointer.
+    func follow(_ mouse: NSPoint) {
+        panel.setFrameOrigin(NSPoint(x: mouse.x - grab.x, y: mouse.y - grab.y))
+    }
+
+    func close() { panel.orderOut(nil) }
 }
 
 /// The strip's single tooltip (system tooltips don't show for an inactive
