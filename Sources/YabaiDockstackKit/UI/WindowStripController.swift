@@ -2,12 +2,15 @@ import AppKit
 
 /// One floating strip per display, directly under the menu bar (right-aligned):
 /// every window on that display as icon + keyword chips, spaces separated by a
-/// divider. Click a chip to jump to it; hover for the full title and space.
+/// divider, empty spaces as small named slots. Click a chip to jump to it,
+/// hover for the full title and space and a ✕ to close it; drag it onto any
+/// display's strip to move it to that space.
 public final class WindowStripController {
     private let client: YabaiClient
     private let focuser: WindowFocuser
     private var enabled = false
     private var panels: [Int: NSPanel] = [:]
+    private var views: [Int: StripView] = [:]
     private var rendered: [Int: WindowStripModel.Rendered] = [:]
     /// The "+N" chip was clicked (wired to opening the window menu).
     public var onOverflowClick: (() -> Void)?
@@ -56,6 +59,7 @@ public final class WindowStripController {
         dragging = false
         panels.values.forEach { $0.orderOut(nil) }
         panels.removeAll()
+        views.removeAll()
         rendered.removeAll()
     }
 
@@ -65,8 +69,7 @@ public final class WindowStripController {
         guard !dragging else { return }
         let screens = ScreenProvider.screens()
         var live = Set<Int>()
-        // A display with no windows gets no strip (its sections are only empty drop slots).
-        for strip in strips where !strip.hidden && strip.sections.contains(where: { !$0.chips.isEmpty }) {
+        for strip in strips where WindowStripModel.shows(strip) {
             guard let frame = displays.first(where: { $0.index == strip.display })?.frame,
                   let screen = screens.first(where: { abs($0.yabaiFrame.x - frame.x) < 1 && abs($0.yabaiFrame.y - frame.y) < 1 }),
                   let ns = NSScreen.screens.first(where: { $0.frame == screen.cocoaFrame }) else { continue }
@@ -86,36 +89,66 @@ public final class WindowStripController {
                                             self?.focuser.focus(windowId: id)
                                         }
                                     },
+                                    onClose: { [weak self] id in
+                                        DispatchQueue.global(qos: .userInitiated).async {
+                                            self?.client.close(windowId: id)
+                                        }
+                                    },
                                     onOverflow: { [weak self] in self?.onOverflowClick?() })
+            content.onDrag = { [weak self] id, space, phase in self?.handleDrag(id, from: space, phase) }
+            views[strip.display] = content
+            // The same material as the switcher, so it follows light / dark mode.
+            let size = content.fittedSize
+            let shell = RoundedPanelView(frame: CGRect(origin: .zero, size: size), radius: 7 * scale)
+            let effect = NSVisualEffectView(frame: shell.bounds)
+            effect.autoresizingMask = [.width, .height]
+            effect.material = .hudWindow
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            effect.addSubview(content)
+            shell.addSubview(effect)
+            // Size from the view's own fitted size (it doesn't follow the panel).
             let vf = ns.visibleFrame
-            // Size from the view's own fitted size: as a contentView its frame
-            // follows the panel, so reading it back would just echo the panel.
-            let anchor = { [weak panel, weak content] in
-                guard let panel, let content else { return }
-                let size = content.fittedSize
-                panel.setFrame(NSRect(x: vf.maxX - size.width - 8, y: vf.maxY - size.height - 2,
-                                      width: size.width, height: size.height), display: true)
-            }
-            content.onWidthChange = anchor
-            content.onDragActive = { [weak self] active in
-                guard let self else { return }
-                self.dragging = active
-                if !active, let last = self.last {
-                    self.rendered.removeAll()  // force a redraw with whatever arrived meanwhile
-                    self.render(last.strips, displays: last.displays)
-                }
-            }
-            content.onDrop = { [weak self] id, space in self?.onDropToSpace?(id, space) }
-            anchor()
-            panel.contentView = content
+            panel.setFrame(NSRect(x: vf.maxX - size.width - 8, y: vf.maxY - size.height - 2,
+                                  width: size.width, height: size.height), display: true)
+            panel.contentView = shell
             panel.orderFrontRegardless()
         }
         for (display, panel) in panels where !live.contains(display) {
             panel.contentView = nil  // detaches chips → their tooltip is dropped
             panel.orderOut(nil)
             panels.removeValue(forKey: display)
+            views.removeValue(forKey: display)
             rendered.removeValue(forKey: display)
         }
+    }
+
+    /// Drags span every display's strip: the target is whichever strip the
+    /// pointer is over, not only the one the chip came from.
+    private func handleDrag(_ windowId: Int, from space: Int, _ phase: StripChip.DragPhase) {
+        switch phase {
+        case .began:
+            dragging = true
+            views.values.forEach { $0.setDragging(true) }
+        case .moved:
+            let target = dropTarget()
+            views.values.forEach { $0.setTarget(target == space ? nil : target) }
+        case .ended:
+            let target = dropTarget()
+            views.values.forEach { $0.setDragging(false) }
+            if let target, target != space { onDropToSpace?(windowId, target) }
+            dragging = false
+            if let last {
+                rendered.removeAll()  // force a redraw with whatever arrived meanwhile
+                render(last.strips, displays: last.displays)
+            }
+        }
+    }
+
+    private func dropTarget() -> Int? {
+        let p = NSEvent.mouseLocation
+        return WindowStripModel.dropSpace(screenX: Double(p.x), screenY: Double(p.y),
+                                          regions: views.values.compactMap(\.dropRegion))
     }
 
     private func makePanel() -> NSPanel {
@@ -131,45 +164,53 @@ public final class WindowStripController {
     }
 }
 
-/// The strip's content: chips separated by a thin divider between spaces.
-/// Empty spaces take no room until a chip is dragged; then they open up as
-/// named drop slots.
+private extension NSView {
+    /// A dynamic system color resolved for this view's light / dark
+    /// appearance (layer colors don't follow appearance changes on their own).
+    func resolved(_ color: NSColor) -> CGColor {
+        var cg = color.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance { cg = color.cgColor }
+        return cg
+    }
+}
+
+/// The strip's content: chips separated by a thin divider between spaces;
+/// empty spaces are small named slots (and drop targets).
 private final class StripView: NSView {
     private struct Entry {
         let section: WindowStripModel.SpaceSection
         let chips: [StripChip]
-        let emptyLabel: NSTextField?
+        let slot: EmptySlot?
         let divider: NSView
         let highlight: NSView
     }
     private var entries: [Entry] = []
     private var overflow: OverflowChip?
     private var ranges: [(space: Int, minX: Double, maxX: Double)] = []
-    private var expanded = false
+    /// A chip drag is in progress on some display: the visible space's tint
+    /// gives way to the drop-target highlight.
+    private var dragging = false
+    private var target: Int?
     private let k: CGFloat
     /// Width × height the content needs (the panel is sized from this).
     private(set) var fittedSize: CGSize = .zero
 
-    var onWidthChange: (() -> Void)?
-    var onDragActive: ((Bool) -> Void)?
-    var onDrop: ((Int, Int) -> Void)?
+    var onDrag: ((_ windowId: Int, _ space: Int, _ phase: StripChip.DragPhase) -> Void)?
 
     init(strip: WindowStripModel.DisplayStrip, scale k: CGFloat, maxWidth: CGFloat,
-         onClick: @escaping (Int) -> Void, onOverflow: @escaping () -> Void) {
+         onClick: @escaping (Int) -> Void, onClose: @escaping (Int) -> Void,
+         onOverflow: @escaping () -> Void) {
         self.k = k
         super.init(frame: .zero)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.6).cgColor
-        layer?.cornerRadius = 7 * k
 
-        let filled = strip.sections.filter { !$0.chips.isEmpty }
-        let chips = filled.flatMap(\.chips)
-        let dividers = CGFloat(max(filled.count - 1, 0)) * 9 * k
+        let chips = strip.sections.flatMap(\.chips)
+        let dividers = CGFloat(max(strip.sections.count - 1, 0)) * 9 * k
+        let slots = strip.sections.filter(\.chips.isEmpty).map { EmptySlot.width($0.name, scale: k) }.reduce(0, +)
         let density = WindowStripModel.fit(
             fullWidths: chips.map { Double(StripChip.width(for: $0, style: .full, scale: k)) },
             compactWidths: chips.map { Double(StripChip.width(for: $0, style: .compact, scale: k)) },
             iconWidth: Double(StripChip.width(for: nil, style: .iconOnly, scale: k)),
-            overflowWidth: Double(30 * k), available: Double(maxWidth - dividers - 8 * k))
+            overflowWidth: Double(30 * k), available: Double(maxWidth - dividers - slots - 8 * k))
         let style: StripChip.Style
         var budget = chips.count
         switch density {
@@ -186,26 +227,23 @@ private final class StripView: NSView {
             addSubview(highlight)
             let divider = NSView()
             divider.wantsLayer = true
-            divider.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.3).cgColor
             addSubview(divider)
             var views: [StripChip] = []
             for chip in section.chips where budget > 0 {
-                let v = StripChip(chip: chip, section: section, style: style, scale: k, onClick: onClick)
-                v.onDrag = { [weak self] id, phase, ev in self?.handleDrag(id, from: section.space, phase, ev) }
+                let v = StripChip(chip: chip, section: section, style: style, scale: k,
+                                  onClick: onClick, onClose: onClose)
+                v.onDrag = { [weak self] id, phase in self?.onDrag?(id, section.space, phase) }
                 addSubview(v)
                 views.append(v)
                 budget -= 1
             }
-            var label: NSTextField?
+            var slot: EmptySlot?
             if section.chips.isEmpty {
-                let l = NSTextField(labelWithString: section.name)
-                l.font = .systemFont(ofSize: 10 * k, weight: .medium)
-                l.textColor = NSColor.white.withAlphaComponent(0.7)
-                l.sizeToFit()
-                addSubview(l)
-                label = l
+                let s = EmptySlot(name: section.name, scale: k)
+                addSubview(s)
+                slot = s
             }
-            entries.append(Entry(section: section, chips: views, emptyLabel: label,
+            entries.append(Entry(section: section, chips: views, slot: slot,
                                  divider: divider, highlight: highlight))
         }
         if case let .overflow(n) = density {
@@ -224,10 +262,9 @@ private final class StripView: NSView {
         var shown = 0
         ranges = []
         for e in entries {
-            let isEmpty = e.section.chips.isEmpty
-            let visible = !isEmpty ? !e.chips.isEmpty : expanded
+            // A space whose chips all went into the "+N" overflow takes no room.
+            let visible = e.slot != nil || !e.chips.isEmpty
             e.divider.isHidden = !(visible && shown > 0)
-            e.emptyLabel?.isHidden = !visible
             e.highlight.isHidden = !visible
             guard visible else { continue }
             if shown > 0 {
@@ -240,13 +277,11 @@ private final class StripView: NSView {
                 c.frame.origin = CGPoint(x: x, y: 2 * k)
                 x += c.frame.width
             }
-            if let l = e.emptyLabel {
-                l.frame.origin = CGPoint(x: x + 6 * k, y: (h - l.frame.height) / 2)
-                x += l.frame.width + 12 * k
+            if let s = e.slot {
+                s.frame.origin = CGPoint(x: x, y: 2 * k)
+                x += s.frame.width
             }
             e.highlight.frame = NSRect(x: start - 2 * k, y: 2 * k, width: x - start + 4 * k, height: h - 4 * k)
-            e.highlight.layer?.backgroundColor = e.section.isVisible && !expanded
-                ? NSColor.white.withAlphaComponent(0.1).cgColor : nil
             ranges.append((space: e.section.space, minX: Double(start), maxX: Double(x)))
         }
         if let more = overflow {
@@ -255,33 +290,91 @@ private final class StripView: NSView {
         }
         fittedSize = CGSize(width: x + pad, height: h)
         frame = NSRect(origin: .zero, size: fittedSize)
+        applyColors()
     }
 
-    private func handleDrag(_ windowId: Int, from space: Int, _ phase: StripChip.DragPhase, _ event: NSEvent) {
-        switch phase {
-        case .began:
-            expanded = true
-            onDragActive?(true)
-            relayout()
-            onWidthChange?()
-        case .moved:
-            let p = convert(event.locationInWindow, from: nil)
-            let target = WindowStripModel.dropSpace(x: Double(p.x), y: Double(p.y),
-                                                    height: Double(bounds.height), sections: ranges)
-            for e in entries {
-                e.highlight.layer?.backgroundColor = e.section.space == target && target != space
-                    ? NSColor.controlAccentColor.withAlphaComponent(0.45).cgColor : nil
+    private func applyColors() {
+        for e in entries {
+            e.divider.layer?.backgroundColor = resolved(.separatorColor)
+            if e.section.space == target {
+                e.highlight.layer?.backgroundColor = resolved(NSColor.controlAccentColor.withAlphaComponent(0.45))
+            } else if e.section.isVisible && !dragging {
+                e.highlight.layer?.backgroundColor = resolved(NSColor.labelColor.withAlphaComponent(0.1))
+            } else {
+                e.highlight.layer?.backgroundColor = nil
             }
-        case .ended:
-            let p = convert(event.locationInWindow, from: nil)
-            let target = WindowStripModel.dropSpace(x: Double(p.x), y: Double(p.y),
-                                                    height: Double(bounds.height), sections: ranges)
-            expanded = false
-            relayout()
-            onWidthChange?()
-            if let target, target != space { onDrop?(windowId, target) }
-            onDragActive?(false)
         }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyColors()
+    }
+
+    func setDragging(_ on: Bool) {
+        dragging = on
+        if !on { target = nil }
+        applyColors()
+    }
+
+    func setTarget(_ space: Int?) {
+        guard space != target else { return }
+        target = space
+        applyColors()
+    }
+
+    /// This strip on screen, for drops coming from any display's strip.
+    var dropRegion: WindowStripModel.DropRegion? {
+        guard let window else { return nil }
+        return WindowStripModel.DropRegion(frame: window.convertToScreen(convert(bounds, to: nil)),
+                                           sections: ranges)
+    }
+}
+
+/// An empty space: a small tinted slot with the space's name.
+private final class EmptySlot: NSView {
+    private static let labelMax: CGFloat = 44
+
+    private static func makeLabel(_ name: String, _ k: CGFloat) -> NSTextField {
+        let l = NSTextField(labelWithString: name)
+        l.font = .systemFont(ofSize: 10 * k, weight: .medium)
+        l.textColor = .secondaryLabelColor
+        l.alignment = .center
+        l.lineBreakMode = .byTruncatingTail
+        return l
+    }
+
+    /// Measured on a label set up exactly like the shown one (truncation
+    /// changes its fitting width).
+    private static func labelWidth(_ name: String, _ k: CGFloat) -> CGFloat {
+        min(ceil(makeLabel(name, k).fittingSize.width), labelMax * k)
+    }
+
+    static func width(_ name: String, scale k: CGFloat) -> CGFloat {
+        labelWidth(name, k) + 12 * k
+    }
+
+    init(name: String, scale k: CGFloat) {
+        let h = (WindowStripController.baseHeight - 4) * k
+        super.init(frame: NSRect(x: 0, y: 0, width: Self.width(name, scale: k), height: h))
+        wantsLayer = true
+        layer?.cornerRadius = 4 * k
+        let label = Self.makeLabel(name, k)
+        let size = label.fittingSize
+        label.frame = NSRect(x: 6 * k, y: (h - size.height) / 2,
+                             width: Self.labelWidth(name, k), height: size.height)
+        addSubview(label)
+        applyColors()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func applyColors() {
+        layer?.backgroundColor = resolved(NSColor.labelColor.withAlphaComponent(0.08))
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyColors()
     }
 }
 
@@ -292,6 +385,12 @@ private final class StripChip: NSView {
     private let chip: WindowStripModel.Chip
     private let section: WindowStripModel.SpaceSection
     private let onClick: (Int) -> Void
+    private let onClose: (Int) -> Void
+    private let iconView: NSImageView
+    /// Hover ✕: takes the icon's place on a labelled chip (like a browser
+    /// tab); a corner badge on an icon-only one, so the chip stays clickable.
+    private let closeView = NSImageView()
+    private let closeReplacesIcon: Bool
 
     private static func font(_ k: CGFloat) -> NSFont { .systemFont(ofSize: 11 * k) }
 
@@ -310,11 +409,15 @@ private final class StripChip: NSView {
     }
 
     init(chip: WindowStripModel.Chip, section: WindowStripModel.SpaceSection, style: Style,
-         scale k: CGFloat, onClick: @escaping (Int) -> Void) {
+         scale k: CGFloat, onClick: @escaping (Int) -> Void, onClose: @escaping (Int) -> Void) {
         self.chip = chip
         self.section = section
         self.onClick = onClick
+        self.onClose = onClose
+        closeReplacesIcon = style != .iconOnly
         let h = (WindowStripController.baseHeight - 4) * k
+        let icon = 16 * k
+        iconView = NSImageView(frame: NSRect(x: 5 * k, y: (h - icon) / 2, width: icon, height: icon))
         super.init(frame: NSRect(x: 0, y: 0, width: Self.width(for: chip, style: style, scale: k), height: h))
         wantsLayer = true
         layer?.cornerRadius = 5 * k
@@ -322,16 +425,27 @@ private final class StripChip: NSView {
             layer?.borderWidth = 1.5
             layer?.borderColor = NSColor.controlAccentColor.cgColor
         }
-        let icon = 16 * k
-        let iv = NSImageView(frame: NSRect(x: 5 * k, y: (h - icon) / 2, width: icon, height: icon))
-        iv.image = NSRunningApplication(processIdentifier: pid_t(chip.pid))?.icon
+        iconView.image = NSRunningApplication(processIdentifier: pid_t(chip.pid))?.icon
             ?? NSWorkspace.shared.icon(for: .applicationBundle)
-        iv.imageScaling = .scaleProportionallyUpOrDown
-        addSubview(iv)
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        addSubview(iconView)
+
+        closeView.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: nil)
+        closeView.imageScaling = .scaleProportionallyUpOrDown
+        closeView.contentTintColor = .secondaryLabelColor
+        if closeReplacesIcon {
+            closeView.frame = iconView.frame.insetBy(dx: 1 * k, dy: 1 * k)
+        } else {
+            let b = max(10, 10 * k)
+            closeView.frame = NSRect(x: 0, y: h - b, width: b, height: b)
+        }
+        closeView.isHidden = true
+        addSubview(closeView)
+
         guard style != .iconOnly else { return }
         let label = NSTextField(labelWithString: chip.keyword)
         label.font = Self.font(k)
-        label.textColor = .white
+        label.textColor = .labelColor
         label.lineBreakMode = .byTruncatingTail
         label.sizeToFit()
         let x = 5 * k + icon + 4 * k
@@ -348,19 +462,29 @@ private final class StripChip: NSView {
                                        owner: self, userInfo: nil))
     }
 
+    private func setHover(_ on: Bool) {
+        layer?.backgroundColor = on ? resolved(NSColor.labelColor.withAlphaComponent(0.15)) : nil
+        closeView.isHidden = !on
+        if closeReplacesIcon { iconView.isHidden = on }
+    }
+
     override func mouseEntered(with event: NSEvent) {
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.15).cgColor
+        setHover(true)
         let title = chip.title.isEmpty ? chip.app : "\(chip.app) — \(chip.title)"
         StripTooltip.show("\(title)\nSpace \(section.name)", below: self)
     }
     override func mouseExited(with event: NSEvent) {
-        layer?.backgroundColor = nil
+        setHover(false)
         StripTooltip.hide(owner: self)
     }
     enum DragPhase { case began, moved, ended }
-    var onDrag: ((_ windowId: Int, _ phase: DragPhase, _ event: NSEvent) -> Void)?
+    var onDrag: ((_ windowId: Int, _ phase: DragPhase) -> Void)?
     private var pressPoint: NSPoint?
     private var dragging = false
+
+    private func overClose(_ event: NSEvent) -> Bool {
+        !closeView.isHidden && closeView.frame.contains(convert(event.locationInWindow, from: nil))
+    }
 
     override func mouseDown(with event: NSEvent) {
         StripTooltip.hide(owner: self)
@@ -374,9 +498,9 @@ private final class StripChip: NSView {
             guard abs(p.x - start.x) + abs(p.y - start.y) > 4 else { return }
             dragging = true
             alphaValue = 0.4
-            onDrag?(chip.id, .began, event)
+            onDrag?(chip.id, .began)
         }
-        onDrag?(chip.id, .moved, event)
+        onDrag?(chip.id, .moved)
     }
     override func mouseUp(with event: NSEvent) {
         guard pressPoint != nil else { return }
@@ -384,7 +508,10 @@ private final class StripChip: NSView {
         if dragging {
             dragging = false
             alphaValue = 1
-            onDrag?(chip.id, .ended, event)
+            onDrag?(chip.id, .ended)
+        } else if overClose(event) {
+            alphaValue = 0.4  // until the refresh drops it
+            onClose(chip.id)
         } else {
             onClick(chip.id)
         }
@@ -448,7 +575,7 @@ private final class OverflowChip: NSView {
         super.init(frame: .zero)
         let label = NSTextField(labelWithString: "+\(count)")
         label.font = .systemFont(ofSize: 11 * k, weight: .semibold)
-        label.textColor = .white
+        label.textColor = .labelColor
         label.alignment = .center
         label.sizeToFit()
         label.frame = NSRect(x: 0, y: ((WindowStripController.baseHeight - 4) * k - label.frame.height) / 2,

@@ -1191,6 +1191,22 @@ check(SpacesInteraction.actionIndex(selection: 2, count: 5, highlighted: false) 
       "pointer left every tile → Enter / ⌘W / ⌘Q do nothing")
 check(SpacesInteraction.actionIndex(selection: 0, count: 0, highlighted: true) == nil, "no matches → nothing")
 
+print("Window strip: empty slots, cross-display drop")
+do {
+    let empty = WindowStripModel.SpaceSection(space: 3, name: "3", isVisible: true, chips: [])
+    check(WindowStripModel.shows(.init(display: 2, hidden: false, sections: [empty])), "display with only empty spaces gets a strip")
+    check(!WindowStripModel.shows(.init(display: 2, hidden: true, sections: [empty])), "fullscreen display gets none")
+    check(!WindowStripModel.shows(.init(display: 2, hidden: false, sections: [])), "no spaces → no strip")
+    let left = WindowStripModel.DropRegion(frame: CGRect(x: 0, y: 1000, width: 200, height: 20),
+                                           sections: [(space: 1, minX: 0, maxX: 100), (space: 2, minX: 110, maxX: 200)])
+    let right = WindowStripModel.DropRegion(frame: CGRect(x: 1800, y: 900, width: 200, height: 20),
+                                            sections: [(space: 5, minX: 0, maxX: 90), (space: 6, minX: 100, maxX: 200)])
+    check(WindowStripModel.dropSpace(screenX: 150, screenY: 1010, regions: [left, right]) == 2, "drop on own display")
+    check(WindowStripModel.dropSpace(screenX: 1950, screenY: 910, regions: [left, right]) == 6, "drop on another display")
+    check(WindowStripModel.dropSpace(screenX: 1000, screenY: 910, regions: [left, right]) == nil, "between strips → cancel")
+    check(WindowStripModel.dropSpace(screenX: 1950, screenY: 500, regions: [left, right]) == nil, "far below → cancel")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

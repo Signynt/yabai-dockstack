@@ -73,4 +73,22 @@ final class WindowStripModelTests: XCTestCase {
         let strips = WindowStripModel.build(windows: windows, spaces: sp, spaceLabels: [:], includeEmpty: true)
         XCTAssertFalse(strips[0].sections.map(\.space).contains(4))
     }
+
+    func testStripShownForAnyDisplayWithSpaces() {
+        let empty = WindowStripModel.SpaceSection(space: 3, name: "3", isVisible: true, chips: [])
+        XCTAssertTrue(WindowStripModel.shows(.init(display: 2, hidden: false, sections: [empty])))
+        XCTAssertFalse(WindowStripModel.shows(.init(display: 2, hidden: true, sections: [empty])))
+        XCTAssertFalse(WindowStripModel.shows(.init(display: 2, hidden: false, sections: [])))
+    }
+
+    func testDropSpaceAcrossDisplays() {
+        let left = WindowStripModel.DropRegion(frame: CGRect(x: 0, y: 1000, width: 200, height: 20),
+                                               sections: [(space: 1, minX: 0, maxX: 100), (space: 2, minX: 110, maxX: 200)])
+        let right = WindowStripModel.DropRegion(frame: CGRect(x: 1800, y: 900, width: 200, height: 20),
+                                                sections: [(space: 5, minX: 0, maxX: 90), (space: 6, minX: 100, maxX: 200)])
+        XCTAssertEqual(WindowStripModel.dropSpace(screenX: 150, screenY: 1010, regions: [left, right]), 2)
+        XCTAssertEqual(WindowStripModel.dropSpace(screenX: 1950, screenY: 910, regions: [left, right]), 6)
+        XCTAssertNil(WindowStripModel.dropSpace(screenX: 1000, screenY: 910, regions: [left, right]))
+        XCTAssertNil(WindowStripModel.dropSpace(screenX: 1950, screenY: 500, regions: [left, right]))
+    }
 }

@@ -19,6 +19,9 @@ public enum WindowStripModel {
         public let name: String
         public let isVisible: Bool
         public let chips: [Chip]
+        public init(space: Int, name: String, isVisible: Bool, chips: [Chip]) {
+            self.space = space; self.name = name; self.isVisible = isVisible; self.chips = chips
+        }
     }
     public struct DisplayStrip: Equatable {
         public let display: Int
@@ -75,6 +78,34 @@ public enum WindowStripModel {
             let hidden = spaces.contains { $0.display == display && $0.isVisible && $0.isNativeFullscreen }
             return DisplayStrip(display: display, hidden: hidden, sections: sections)
         }
+    }
+
+    /// Every display with spaces gets a strip (empty spaces show as slots),
+    /// except one showing a native-fullscreen space.
+    public static func shows(_ strip: DisplayStrip) -> Bool {
+        !strip.hidden && !strip.sections.isEmpty
+    }
+
+    /// One display's strip in screen coordinates, with its sections' x
+    /// ranges relative to the strip's left edge.
+    public struct DropRegion {
+        public let frame: CGRect
+        public let sections: [(space: Int, minX: Double, maxX: Double)]
+        public init(frame: CGRect, sections: [(space: Int, minX: Double, maxX: Double)]) {
+            self.frame = frame; self.sections = sections
+        }
+    }
+
+    /// The space a chip dropped at a screen point lands in, over any
+    /// display's strip; nil when it's over none of them.
+    public static func dropSpace(screenX: Double, screenY: Double, regions: [DropRegion]) -> Int? {
+        for r in regions {
+            if let space = dropSpace(x: screenX - Double(r.frame.minX), y: screenY - Double(r.frame.minY),
+                                     height: Double(r.frame.height), sections: r.sections) {
+                return space
+            }
+        }
+        return nil
     }
 
     /// The space a chip dropped at `x` lands in: the section under it, the
