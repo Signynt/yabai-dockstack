@@ -1180,6 +1180,17 @@ do {
           "auto padding defaults off")
 }
 
+print("Search switcher: hover")
+check(SpacesInteraction.hoverPasses(gate: nil, pointer: CGPoint(x: 5, y: 5)), "no gate → hover counts")
+check(!SpacesInteraction.hoverPasses(gate: CGPoint(x: 100, y: 100), pointer: CGPoint(x: 103, y: 98)),
+      "pointer resting where the panel opened → ignored")
+check(SpacesInteraction.hoverPasses(gate: CGPoint(x: 100, y: 100), pointer: CGPoint(x: 106, y: 100)),
+      "pointer moved → hover counts")
+check(SpacesInteraction.actionIndex(selection: 2, count: 5, highlighted: true) == 2, "Enter acts on the highlight")
+check(SpacesInteraction.actionIndex(selection: 2, count: 5, highlighted: false) == nil,
+      "pointer left every tile → Enter / ⌘W / ⌘Q do nothing")
+check(SpacesInteraction.actionIndex(selection: 0, count: 0, highlighted: true) == nil, "no matches → nothing")
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

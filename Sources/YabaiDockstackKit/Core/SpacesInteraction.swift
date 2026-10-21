@@ -9,6 +9,19 @@ public enum CardClick: Equatable {
 
 /// Drop / swap / click rules of the Spaces-style search switcher.
 public enum SpacesInteraction {
+    /// Hover selects only once the pointer has moved off where it rested when
+    /// the panel opened, so a resting pointer can't replace the MRU pick.
+    public static func hoverPasses(gate: CGPoint?, pointer: CGPoint, slack: CGFloat = 4) -> Bool {
+        guard let gate else { return true }
+        return abs(pointer.x - gate.x) > slack || abs(pointer.y - gate.y) > slack
+    }
+
+    /// What Enter / ⌘W / ⌘Q act on: the highlighted window; nothing once the
+    /// pointer has left every tile and the highlight is gone.
+    public static func actionIndex(selection: Int, count: Int, highlighted: Bool) -> Int? {
+        highlighted && selection >= 0 && selection < count ? selection : nil
+    }
+
     /// The space card under `point`. Nil in a gap, on a fullscreen card, or
     /// outside `visible` (the scrolled-into-view part of the cards).
     public static func dropTarget(at point: CGPoint,

@@ -66,11 +66,8 @@ public final class SwitcherController {
         self.config = config
         panel.onHover = { [weak self] idx in
             guard let self else { return }
-            if let gate = self.pointerGate {
-                let p = NSEvent.mouseLocation
-                guard abs(p.x - gate.x) > 4 || abs(p.y - gate.y) > 4 else { return }
-                self.pointerGate = nil
-            }
+            guard SpacesInteraction.hoverPasses(gate: self.pointerGate, pointer: NSEvent.mouseLocation) else { return }
+            self.pointerGate = nil
             self.select(idx)
         }
         panel.onClick = { [weak self] idx in self?.select(idx); self?.commit() }
@@ -81,15 +78,15 @@ public final class SwitcherController {
             self.cancel()
         }
         spacesPanel.onHover = { [weak self] id in
-            guard let self, let idx = self.items.firstIndex(where: { $0.id == id }) else { return }
+            guard let self, let idx = self.items.firstIndex(where: { $0.id == id }),
+                  SpacesInteraction.hoverPasses(gate: self.pointerGate, pointer: NSEvent.mouseLocation) else { return }
+            self.pointerGate = nil
             self.highlightedID = id
             self.select(idx)
             self.spacesPanel.updateSelection(id)
         }
         spacesPanel.onHoverExit = { [weak self] id in
-            guard let self else { return }
-            self.pointerGate = nil
-            guard self.highlightedID == id else { return }
+            guard let self, self.highlightedID == id else { return }
             self.highlightedID = nil
             self.spacesPanel.updateSelection(nil)
         }
@@ -212,9 +209,9 @@ public final class SwitcherController {
     }
 
     public func commit() {
-        // Search switcher with nothing matching: Enter does nothing.
-        guard items.indices.contains(selection) else { if !sticky { cancel() }; return }
-        let id = items[selection].id
+        // Search switcher with nothing matching or nothing highlighted: Enter does nothing.
+        guard let idx = actionIndex else { if !sticky { cancel() }; return }
+        let id = items[idx].id
         mru.touch(id)
         lastCommitID = id
         lastCommitAt = Date()
@@ -226,7 +223,16 @@ public final class SwitcherController {
 
     public func cancel() { hide() }
 
-    public func closeSelected() { close(index: selection) }
+    public func closeSelected() {
+        if let idx = actionIndex { close(index: idx) }
+    }
+
+    /// The window keyboard actions apply to (the search switcher's highlight
+    /// can be gone after the pointer leaves a tile).
+    private var actionIndex: Int? {
+        SpacesInteraction.actionIndex(selection: selection, count: items.count,
+                                      highlighted: cards == nil || highlightedID != nil)
+    }
 
     // MARK: - Internals
 
@@ -406,8 +412,8 @@ public final class SwitcherController {
 
     /// ⌘Q — gracefully quit the selected window's whole application.
     public func quitSelected() {
-        guard items.indices.contains(selection) else { return }
-        let pid = items[selection].pid
+        guard let idx = actionIndex else { return }
+        let pid = items[idx].pid
         pendingCloseIDs.formUnion(items.filter { $0.pid == pid }.map { $0.id })
         applyPendingRemoval()
         NSRunningApplication(processIdentifier: pid_t(pid))?.terminate()

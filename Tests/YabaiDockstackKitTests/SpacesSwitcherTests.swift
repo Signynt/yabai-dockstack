@@ -85,4 +85,16 @@ final class SpacesSwitcherTests: XCTestCase {
         XCTAssertFalse(SpacesInteraction.pillFits(CGSize(width: 34, height: 19)))
         XCTAssertFalse(SpacesInteraction.pillFits(CGSize(width: 24, height: 40)))
     }
+
+    func testHoverGateWaitsForRealPointerMovement() {
+        XCTAssertTrue(SpacesInteraction.hoverPasses(gate: nil, pointer: CGPoint(x: 5, y: 5)))
+        XCTAssertFalse(SpacesInteraction.hoverPasses(gate: CGPoint(x: 100, y: 100), pointer: CGPoint(x: 103, y: 98)))
+        XCTAssertTrue(SpacesInteraction.hoverPasses(gate: CGPoint(x: 100, y: 100), pointer: CGPoint(x: 106, y: 100)))
+    }
+
+    func testActionsNeedAVisibleHighlight() {
+        XCTAssertEqual(SpacesInteraction.actionIndex(selection: 2, count: 5, highlighted: true), 2)
+        XCTAssertNil(SpacesInteraction.actionIndex(selection: 2, count: 5, highlighted: false))
+        XCTAssertNil(SpacesInteraction.actionIndex(selection: 0, count: 0, highlighted: true))
+    }
 }
