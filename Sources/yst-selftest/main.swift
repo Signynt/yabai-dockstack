@@ -1207,6 +1207,22 @@ do {
     check(WindowStripModel.dropSpace(screenX: 1950, screenY: 500, regions: [left, right]) == nil, "far below → cancel")
 }
 
+print("Pin window on top")
+do {
+    var ps = YabaiSettings.defaults
+    ps.rules = [WindowRule(app: "IINA", mode: .pin), WindowRule(app: "Finder", mode: .float)]
+    let text = YabaiManagedConfig.generate(ps)
+    check(text.contains(#"yabai -m rule --add app="IINA" manage=off sub-layer=above"#), "pin rule floats the app above others")
+    check(YabaiManagedConfig.parse(text) == ps, "pin rule round-trips")
+    check(FreeformImporter.importYabai(fileText: #"yabai -m rule --add app="^IINA$" manage=off sub-layer=above"#,
+                                       current: YabaiSettings.defaults).settings.rules == [WindowRule(app: "^IINA$", mode: .pin)],
+          "import recognises a pin rule")
+    let pin = ShortcutCatalog.action(id: "pin-window-on-top")
+    check(pin?.group == "Shared" && pin?.defaultHotkey == nil && pin?.command == "sh ${SCRIPTS}/togglePinWindow.sh",
+          "pin shortcut: Shared, no default hotkey, runs the toggle script")
+    check(ScriptInstaller.scriptNames.contains("togglePinWindow.sh"), "toggle script is installed")
+}
+
 print("")
 if failures == 0 { print("ALL SELF-TESTS PASSED") }
 else { print("\(failures) SELF-TEST(S) FAILED"); exit(1) }

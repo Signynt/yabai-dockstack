@@ -26,8 +26,9 @@ public enum YabaiManagedConfig {
         lines.append("yabai -m config right_padding \(s.rightPadding)")
         lines.append("yabai -m config window_gap \(s.gap)")
         for r in s.rules {
-            let manage = r.mode == .float ? "off" : "on"
-            lines.append("yabai -m rule --add app=\"\(r.app)\" manage=\(manage) sub-layer=normal")
+            let manage = r.mode == .manage ? "on" : "off"
+            let layer = r.mode == .pin ? "above" : "normal"
+            lines.append("yabai -m rule --add app=\"\(r.app)\" manage=\(manage) sub-layer=\(layer)")
         }
         if s.layout == .float {
             lines.append("yabai -m rule --add app=\"\(floatCatchAllApp)\" manage=off sub-layer=normal")
@@ -75,7 +76,8 @@ public enum YabaiManagedConfig {
         guard let appStart = line.range(of: "app=\""),
               let appEnd = line.range(of: "\"", range: appStart.upperBound..<line.endIndex) else { return nil }
         let app = String(line[appStart.upperBound..<appEnd.lowerBound])
-        let mode: WindowRule.Mode = line.contains("manage=on") ? .manage : .float
+        let mode: WindowRule.Mode = line.contains("sub-layer=above") ? .pin
+            : line.contains("manage=on") ? .manage : .float
         return WindowRule(app: app, mode: mode)
     }
 }

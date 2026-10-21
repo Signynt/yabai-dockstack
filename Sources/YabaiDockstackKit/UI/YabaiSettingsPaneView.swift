@@ -100,7 +100,7 @@ public final class YabaiSettingsPaneView: NSView {
         let modeCol = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("mode"))
         modeCol.title    = L10n.t("ui.yabai.colMode")
         modeCol.minWidth = 90
-        modeCol.width    = 110
+        modeCol.width    = 150
 
         tableView = NSTableView()
         tableView.addTableColumn(appCol)
@@ -374,13 +374,13 @@ extension YabaiSettingsPaneView: NSTableViewDelegate {
             } else {
                 cell = NSPopUpButton()
                 cell.identifier = cellID
-                cell.addItems(withTitles: [L10n.t("ui.yabai.modeFloating"), L10n.t("ui.yabai.modeManage")])
+                cell.addItems(withTitles: Self.modes.map { L10n.t($0.key) })
                 cell.target = self
                 cell.action = #selector(modeChanged(_:))
                 cell.controlSize = .small
                 cell.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
             }
-            cell.selectItem(at: rule.mode == .float ? 0 : 1)
+            cell.selectItem(at: Self.modes.firstIndex { $0.mode == rule.mode } ?? 0)
             return cell
         }
 
@@ -395,10 +395,16 @@ extension YabaiSettingsPaneView: NSTableViewDelegate {
         settings.rules[row].app = sender.stringValue
     }
 
+    /// The Mode column's choices, in popup order.
+    private static let modes: [(mode: WindowRule.Mode, key: String)] = [
+        (.float, "ui.yabai.modeFloating"), (.manage, "ui.yabai.modeManage"), (.pin, "ui.yabai.modePin"),
+    ]
+
     @objc private func modeChanged(_ sender: NSPopUpButton) {
         let row = tableView.row(for: sender)
         guard row >= 0, row < settings.rules.count else { return }
-        settings.rules[row].mode = sender.indexOfSelectedItem == 0 ? .float : .manage
+        guard Self.modes.indices.contains(sender.indexOfSelectedItem) else { return }
+        settings.rules[row].mode = Self.modes[sender.indexOfSelectedItem].mode
     }
 }
 

@@ -1,7 +1,9 @@
 import Foundation
 
 public struct WindowRule: Equatable {
-    public enum Mode: String { case float, manage }   // float => manage=off; manage => manage=on
+    /// float => manage=off; manage => manage=on; pin => manage=off sub-layer=above
+    /// (kept above other windows; the sub-layer needs the scripting addition).
+    public enum Mode: String { case float, manage, pin }
     public var app: String
     public var mode: Mode
     public init(app: String, mode: Mode) { self.app = app; self.mode = mode }

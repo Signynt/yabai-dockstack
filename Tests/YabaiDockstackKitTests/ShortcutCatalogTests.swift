@@ -52,4 +52,12 @@ final class ShortcutCatalogTests: XCTestCase {
             XCTAssertFalse(a.symbol.isEmpty, "\(a.id) missing symbol")
         }
     }
+
+    func testPinWindowShortcutHasNoDefaultHotkey() {
+        let a = ShortcutCatalog.action(id: "pin-window-on-top")
+        XCTAssertEqual(a?.group, "Shared")
+        XCTAssertNil(a?.defaultHotkey)
+        XCTAssertEqual(a?.command, "sh ${SCRIPTS}/togglePinWindow.sh")
+        XCTAssertTrue(ScriptInstaller.scriptNames.contains("togglePinWindow.sh"))
+    }
 }
