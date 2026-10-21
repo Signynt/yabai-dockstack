@@ -196,7 +196,12 @@ public enum YabaiDockstack {
         let spaceMover = SpaceMover(client: client)
         let windowSpaceMover = WindowSpaceMover(client: client, spaceMover: spaceMover)
         switcher.mover = windowSpaceMover
-        strip.onDropToSpace = { id, space in windowSpaceMover.move(windowId: id, toSpace: space) }
+        // Same as the switcher: with the scripting addition, follow only if asked
+        // to (otherwise an instant move, no space switch); without it the
+        // SIP-free walk always ends on the target.
+        strip.onDropToSpace = { id, space in
+            windowSpaceMover.move(windowId: id, toSpace: space, follow: config.switcherFollowMove)
+        }
         let menu = MenuBarController()
         let listener = SignalListener(
             socketPath: config.socketPath,
