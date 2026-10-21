@@ -7,6 +7,7 @@ import CoreGraphics
 /// cards. Keyboard handling lives in `SwitcherController`.
 public final class SpacesPanel {
     public var onHover: ((Int) -> Void)?
+    public var onHoverExit: ((Int) -> Void)?
     public var onClick: ((Int) -> Void)?
     public var onCloseItem: ((Int) -> Void)?
     /// (window id, target space)
@@ -94,6 +95,7 @@ public final class SpacesPanel {
                     let tv = SpacesTileView(frame: rect, tile: tile, thumbnail: thumbnails[tile.item.id])
                     tv.isSelected = tile.item.id == selectedID
                     tv.onHover = { [weak self] in self?.onHover?($0) }
+                    tv.onHoverExit = { [weak self] in self?.onHoverExit?($0) }
                     tv.onClose = { [weak self] in self?.onCloseItem?($0) }
                     tv.onPress = { [weak self] phase, ev in
                         self?.tilePressed(tile.item.id, card.space, draggable: !card.isFullscreen, phase, ev)
@@ -359,31 +361,43 @@ private final class SpacesCardView: PressTrackingView {
 /// project keyword, ✕ when selected. Non-matching tiles are dimmed and inert.
 private final class SpacesTileView: PressTrackingView {
     var onHover: ((Int) -> Void)?
+    var onHoverExit: ((Int) -> Void)?
     var onClose: ((Int) -> Void)?
     var isSelected = false { didSet { refreshSelection() } }
 
     private let id: Int
     private let matches: Bool
+    private let preview: NSView
     private let closeButton = NSButton()
 
     init(frame: CGRect, tile: SpaceTile, thumbnail: CGImage?) {
         id = tile.item.id
         matches = tile.matches
+        preview = NSView(frame: .zero)
         super.init(frame: frame)
         pressEnabled = matches
         wantsLayer = true
         layer?.cornerRadius = 6
         layer?.masksToBounds = true
-        layer?.borderColor = NSColor.controlAccentColor.cgColor
         alphaValue = matches ? 1 : 0.25
         toolTip = tile.item.title.isEmpty ? tile.item.app : "\(tile.item.app) — \(tile.item.title)"
 
         let appIcon = NSRunningApplication(processIdentifier: pid_t(tile.item.pid))?.icon
             ?? NSWorkspace.shared.icon(for: .applicationBundle)
-        let image = NSImageView(frame: bounds.insetBy(dx: 2, dy: 2))
+        let aspect = thumbnail.map { CGFloat($0.width) / CGFloat(max($0.height, 1)) }
+            ?? CGFloat(max(tile.aspect, 0.1))
+        let previewRect = Self.aspectFitRect(aspect: aspect, in: bounds)
+        preview.frame = previewRect
+        preview.wantsLayer = true
+        preview.layer?.cornerRadius = 2
+        preview.layer?.masksToBounds = true
+        preview.layer?.borderColor = NSColor.controlAccentColor.cgColor
+        addSubview(preview)
+
+        let image = NSImageView(frame: preview.bounds)
         image.image = thumbnail.map { NSImage(cgImage: $0, size: .zero) } ?? appIcon
         image.imageScaling = .scaleProportionallyUpOrDown
-        addSubview(image)
+        preview.addSubview(image)
 
         // Capsule: app icon + project keyword, bottom-center.
         let iconSide: CGFloat = 14, pillH: CGFloat = 20
@@ -392,8 +406,9 @@ private final class SpacesTileView: PressTrackingView {
         label.textColor = .white
         label.lineBreakMode = .byTruncatingTail
         label.sizeToFit()
-        let pillW = min(label.frame.width + iconSide + 16, frame.width - 6)
-        let pill = NSView(frame: CGRect(x: (frame.width - pillW) / 2, y: frame.height - pillH - 3,
+        let pillW = min(label.frame.width + iconSide + 16, bounds.width - 6)
+        let pill = NSView(frame: CGRect(x: (bounds.width - pillW) / 2,
+                                        y: bounds.height - pillH - 3,
                                         width: max(pillW, iconSide + 10), height: pillH))
         pill.wantsLayer = true
         pill.layer?.cornerRadius = pillH / 2
@@ -404,7 +419,7 @@ private final class SpacesTileView: PressTrackingView {
         label.frame = CGRect(x: iconSide + 8, y: (pillH - label.frame.height) / 2,
                              width: max(pill.frame.width - iconSide - 13, 0), height: label.frame.height)
         pill.addSubview(label)
-        if SpacesInteraction.pillFits(frame.size) { addSubview(pill) }
+        if SpacesInteraction.pillFits(bounds.size) { addSubview(pill) }
 
         closeButton.bezelStyle = .circular
         closeButton.isBordered = false
@@ -413,9 +428,9 @@ private final class SpacesTileView: PressTrackingView {
         closeButton.contentTintColor = .secondaryLabelColor
         closeButton.target = self
         closeButton.action = #selector(closeTapped)
-        closeButton.frame = NSRect(x: 4, y: 4, width: 18, height: 18)
+        closeButton.frame = NSRect(x: 4, y: preview.bounds.height - 22, width: 18, height: 18)
         closeButton.isHidden = true
-        addSubview(closeButton)
+        preview.addSubview(closeButton)
 
         if matches {
             addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
@@ -426,17 +441,25 @@ private final class SpacesTileView: PressTrackingView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    private static func aspectFitRect(aspect: CGFloat, in bounds: CGRect) -> CGRect {
+        let boundedAspect = max(aspect, 0.1)
+        let width = min(bounds.width, bounds.height * boundedAspect)
+        let height = min(bounds.height, bounds.width / boundedAspect)
+        return CGRect(x: bounds.midX - width / 2, y: bounds.midY - height / 2,
+                      width: width, height: height)
+    }
+
     override func mouseEntered(with event: NSEvent) { onHover?(id) }
+    override func mouseExited(with event: NSEvent) { onHoverExit?(id) }
 
     /// Clicks on a dimmed tile fall through to its card (no window action).
     override func hitTest(_ point: NSPoint) -> NSView? { pressEnabled ? super.hitTest(point) : nil }
 
     private func refreshSelection() {
-        layer?.backgroundColor = isSelected ? NSColor.white.withAlphaComponent(0.2).cgColor : nil
-        layer?.borderWidth = isSelected ? 2.5 : 0
+        preview.layer?.backgroundColor = isSelected ? NSColor.white.withAlphaComponent(0.2).cgColor : nil
+        preview.layer?.borderWidth = isSelected ? 2.5 : 0
         closeButton.isHidden = !isSelected
     }
 
     @objc private func closeTapped() { onClose?(id) }
 }
-

@@ -19,7 +19,7 @@ public enum YabaiDockstack {
         L10n.current = L10n.resolve(AppLanguage(rawValue: config.language) ?? .auto,
                                     preferred: Locale.preferredLanguages)
 
-        if args.contains("--refresh") {
+        if args.contains("--refresh") || args.contains("--space-changed") {
             RefreshClient.sendPoke(socketPath: config.socketPath)
             return
         }
@@ -206,7 +206,16 @@ public enum YabaiDockstack {
                     DispatchQueue.main.async { menu.openMenu() }
                 } else if cmd == "show-switcher" {
                     DispatchQueue.main.async {
-                        switcher.open(scope: .allWindows, sticky: true)
+                        if switcher.isOpen {
+                            switcher.cancel()
+                        } else {
+                            switcher.open(scope: .allWindows, sticky: true)
+                        }
+                    }
+                } else if cmd == "space-changed" {
+                    DispatchQueue.main.async {
+                        switcher.noteActiveSpaceChanged()
+                        coordinator.requestRefresh()
                     }
                 } else {
                     spaceMover.handle(command: cmd)

@@ -431,10 +431,15 @@ func addSwitcherSearchBox(to content: NSView, width: CGFloat, query: String) {
     box.layer?.borderWidth = 1
     box.layer?.cornerRadius = 8
     content.addSubview(box)
-    let q = NSTextField(labelWithString: "🔍 " + (query.isEmpty ? L10n.t("ui.switcher.searchPlaceholder") : query))
+    let icon = NSImageView(frame: CGRect(x: 10, y: 6, width: 18, height: 18))
+    icon.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: L10n.t("ui.switcher.searchPlaceholder"))
+    icon.contentTintColor = query.isEmpty ? .tertiaryLabelColor : .labelColor
+    icon.imageScaling = .scaleProportionallyUpOrDown
+    content.addSubview(icon)
+    let q = NSTextField(labelWithString: query.isEmpty ? L10n.t("ui.switcher.searchPlaceholder") : query)
     q.font = .systemFont(ofSize: 14, weight: .medium)
     q.textColor = query.isEmpty ? .tertiaryLabelColor : .labelColor
     q.lineBreakMode = .byTruncatingHead
-    q.frame = CGRect(x: 10, y: 5, width: width - 20, height: 20)
+    q.frame = CGRect(x: 34, y: 5, width: width - 44, height: 20)
     content.addSubview(q)
 }
