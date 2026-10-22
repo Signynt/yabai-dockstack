@@ -29,6 +29,8 @@ public final class RecordHotkeyControl: NSView {
         clearButton.controlSize = .small
         let stack = NSStackView(views: [button, clearButton])
         stack.spacing = 4
+        // Keep the hidden ✕'s slot so an unset recorder lines up with set ones.
+        stack.detachesHiddenViews = false
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
