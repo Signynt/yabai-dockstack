@@ -28,7 +28,10 @@ dock 預覽、視窗切換器、cmd-tab 替代、選單列、Mission Control 替
 
 這是用 Swift 重寫的乾淨版本,**不是** stackline 的 fork(stackline 需要 Hammerspoon)。
 
-## 最新變更 — v0.3.1
+## 最新變更 — v0.3.2
+
+v0.3.2 修正鍵盤設定裡尚未設定快捷鍵的列,「Record Hotkey」按鈕會跟其他列對齊。
+以下是 v0.3.1 帶來的更新:
 
 - **視窗置頂**(#7,需要 yabai scripting addition)—— Window Rules 新增模式,讓某個 app
   永遠浮在其他視窗上面;也有快捷鍵可以置頂 / 取消置頂目前的視窗。

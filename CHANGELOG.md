@@ -3,6 +3,12 @@
 All notable changes to yabai-dockstack. Full release notes and downloads live on
 the [GitHub Releases](https://github.com/z20240/yabai-dockstack/releases) page.
 
+## v0.3.2 — 2026-10-22
+
+- **Keyboard settings**: a shortcut with no hotkey yet (such as the new
+  Pin / unpin window on top) no longer pushes its Record Hotkey button out of
+  line with the other rows.
+
 ## v0.3.1 — 2026-10-22
 
 - **Pin windows on top** (#7) — needs yabai's scripting addition:

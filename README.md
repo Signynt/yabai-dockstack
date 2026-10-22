@@ -32,7 +32,10 @@ dock preview, window switcher, cmd-tab replacement, menu bar, Mission Control al
 
 It is a clean Swift rewrite — **not** a fork of stackline (which required Hammerspoon).
 
-## What's new — v0.3.1
+## What's new — v0.3.2
+
+v0.3.2 lines up the Record Hotkey button for shortcuts that have no hotkey yet.
+The rest arrived in v0.3.1:
 
 - **Pin windows on top** (#7, needs yabai's scripting addition) — a Window Rules
   mode keeps an app above other windows, and a shortcut pins / unpins the
