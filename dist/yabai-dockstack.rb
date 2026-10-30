@@ -8,8 +8,8 @@
 # launches without a Gatekeeper prompt. Update `version` + `sha256` after each
 # release (scripts/release.sh prints the sha256).
 cask "yabai-dockstack" do
-  version "0.2.16"
-  sha256 "ba374eaee1bfc4c342d651d88f20a7991f6761d456b9c4af916c2312ce3116ea"
+  version "0.3.2"
+  sha256 "0ecf99afccd26285b13d5f6c8b9b8de833c959243fe715720e6b6de2be2c1c19"
 
   url "https://github.com/z20240/yabai-dockstack/releases/download/v#{version}/yabai-dockstack-#{version}.zip"
   name "yabai-dockstack"
@@ -20,9 +20,8 @@ cask "yabai-dockstack" do
 
   # The app is ad-hoc signed but not Apple-notarized, so Gatekeeper would block it.
   # Strip the quarantine attribute on install so it opens without the prompt.
-  postflight do
-    system_command "/usr/bin/xattr",
-                   args: ["-dr", "com.apple.quarantine", "#{appdir}/yabai-dockstack.app"]
+  postflight_steps do
+    run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/yabai-dockstack.app"]
   end
 
   # yabai is required but lives in a third-party tap, which `depends_on` can't

@@ -33,14 +33,13 @@ public enum ShortcutCatalog {
         .init("open-window-switcher", "Open window switcher", "General",
               "sh ${SCRIPTS}/openWindowSwitcher.sh", nil,
               symbol: "rectangle.stack"),
-        .init("open-spaces-view", "Open Spaces View", "General",
-              "sh ${SCRIPTS}/openSpacesView.sh", nil,
-              symbol: "square.grid.2x2"),
 
         // Shared (floating + tiling)
         .init("toggle-float-center", "Float / unfloat & center", "Shared",
               "yabai -m window --toggle float ; yabai -m window --grid 12:12:1:1:9:9",
               hk("ctrl + alt + cmd - space"), symbol: "macwindow.on.rectangle"),
+        .init("pin-window-on-top", "Pin / unpin window on top", "Shared",
+              "sh ${SCRIPTS}/togglePinWindow.sh", nil, symbol: "pin"),
         .init("send-display-prev", "Send window to previous display", "Shared",
               "sh ${SCRIPTS}/moveWindowToLeft.sh display", hk("ctrl + alt - left"), symbol: "arrow.left.to.line"),
         .init("send-display-next", "Send window to next display", "Shared",

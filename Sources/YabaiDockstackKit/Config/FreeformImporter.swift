@@ -125,6 +125,7 @@ public enum FreeformImporter {
               let e = line.range(of: "\"", range: s.upperBound..<line.endIndex) else { return nil }
         let app = String(line[s.upperBound..<e.lowerBound])
         if app == ".*" { return nil }
+        if line.contains("sub-layer=above") { return WindowRule(app: app, mode: .pin) }
         if line.contains("manage=on")  { return WindowRule(app: app, mode: .manage) }
         if line.contains("manage=off") { return WindowRule(app: app, mode: .float) }
         return nil

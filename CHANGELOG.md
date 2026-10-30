@@ -3,6 +3,78 @@
 All notable changes to yabai-dockstack. Full release notes and downloads live on
 the [GitHub Releases](https://github.com/z20240/yabai-dockstack/releases) page.
 
+## v0.3.2 — 2026-10-22
+
+- **Keyboard settings**: a shortcut with no hotkey yet (such as the new
+  Pin / unpin window on top) no longer pushes its Record Hotkey button out of
+  line with the other rows.
+
+## v0.3.1 — 2026-10-22
+
+- **Pin windows on top** (#7) — needs yabai's scripting addition:
+  - a new Window Rules mode, **Float & pin on top**, keeps an app's windows
+    floating above the others (`manage=off sub-layer=above`);
+  - a **Pin / unpin window on top** shortcut (Keyboard → Shared, unbound by
+    default) toggles the focused window; a tiled window is floated while pinned
+    and re-tiled when unpinned. Without the scripting addition it does nothing.
+- **Window strip**:
+  - follows light / dark mode (same frosted material as the switcher);
+  - empty spaces show as small named slots, so you can see which space each
+    window is in, and every display with spaces gets a strip;
+  - drag a window onto **another display's** strip to move it there; a copy of
+    the chip follows the pointer while dragging;
+  - hover a window for a ✕ to close it;
+  - drops follow the same rule as the search switcher: with the scripting
+    addition the move is instant unless "follow the window" is on.
+- **Search switcher** (thanks @Signynt, #6):
+  - its hotkey now toggles it open / closed;
+  - it stays open when the space changes, opens faster, and marks the current
+    space sooner;
+  - ⌘⌫ clears the search, ⌥⌫ deletes a word;
+  - a tighter selection highlight that clears when the pointer leaves a window
+    (Enter / ⌘W / ⌘Q then do nothing until something is highlighted again), and
+    a pointer resting where the switcher opens no longer steals the selection.
+
+## v0.3.0 — 2026-10-20
+
+- **Spaces-style search switcher & drag windows between spaces** (based on
+  @Signynt's Spaces View, #4) — the search switcher now shows every space as a
+  mini desktop, grouped by display, with its windows tiled inside, a project-name
+  capsule on each, and the space you're on marked "Current". Typing dims the
+  windows that don't match. Drag a window onto another space to move it there,
+  even from a space you're not on (the window strip takes drops too):
+  - with yabai's scripting addition the move is instant and the switcher stays
+    open (optionally follow the window: Settings → Switcher);
+  - with SIP on the window is focused and walked over with the simulated gesture,
+    and you end on the destination space.
+  Drag a whole space card onto another to **swap their windows** — this needs
+  the scripting addition. Click a card to go to that space. Optional wallpaper on
+  the cards. The search switcher's hotkey can now be recorded on the Switcher tab.
+- **Project-aware window labels** — windows of the same app are labelled by
+  what tells them apart: VS Code / Cursor / Windsurf → workspace, JetBrains →
+  project, terminals → current folder, otherwise the part of the title that
+  differs. Shown first (bold) in switcher captions, Dock previews, the window
+  menu and the window strip; the full title is on hover.
+- **Window strip** (opt-in) — one strip per display under the menu bar listing
+  that display's windows (icon + project-aware label, divider between spaces);
+  click to jump, hover for title and space, resizable from Settings, "+N"
+  overflow opens the menu; hidden over native-fullscreen spaces.
+- **Hover to open the window menu** (opt-in).
+- **Auto-adjust yabai padding** (opt-in, Settings → Appearance) — sizes yabai's
+  left/right padding for the stack indicators and the top padding for the window
+  strip, live, following their size; restored when turned off or on quit.
+- **Restart yabai-dockstack** from the menu bar menu.
+- **Dock previews match the rest of the app** — same frosted panel as the
+  switcher, colours follow light/dark mode (thanks @Signynt, #5).
+- **⌃-drag to reorder a stack** from its indicator (on by default; uses yabai
+  `--swap`, works without the scripting addition).
+- **Hyper Key** (opt-in) — Caps Lock / right ⌘ / ⌥ / ⌃ → ⌃⌥⌘(⇧), with quick
+  press (Escape / toggle Caps Lock) and an optional ✦ display; restores the key
+  on quit, SIGTERM, and the next launch after a crash.
+- **Fixed: clicking tray-closed apps did nothing** — Gather, Surfshark and
+  similar apps keep their closed window listed without an AX reference, so yabai
+  can't focus it; the app is now reopened instead, which brings that window back.
+
 ## v0.2.16 — 2026-10-14
 
 - **Click-through stack indicator** — new Settings option: clicks pass through

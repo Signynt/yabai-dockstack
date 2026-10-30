@@ -50,7 +50,8 @@ public final class SwitcherPanel {
 
         let pad: CGFloat = 16
         let gap: CGFloat = 10
-        let headerH: CGFloat = query.isEmpty ? 0 : 32
+        // The search switcher always shows its search box; hold mode only once typing.
+        let headerH: CGFloat = query.isEmpty && !keyboardFocus ? 0 : 40
 
         cells = []
         let content: NSView
@@ -153,14 +154,7 @@ public final class SwitcherPanel {
             }
         }
 
-        if headerH > 0 {
-            let q = NSTextField(labelWithString: "🔍 \(query)")
-            q.font = .systemFont(ofSize: 14, weight: .medium)
-            q.textColor = .labelColor
-            q.lineBreakMode = .byTruncatingHead
-            q.frame = CGRect(x: 2, y: 4, width: contentSize.width - 4, height: 20)
-            content.addSubview(q)
-        }
+        if headerH > 0 { addSwitcherSearchBox(to: content, width: contentSize.width, query: query) }
 
         let shell = RoundedPanelView(frame: CGRect(x: 0, y: 0,
                                width: contentSize.width + pad * 2,
@@ -312,16 +306,13 @@ final class SwitcherCellView: NSView {
 
         // Small app-icon badge over the thumbnail's bottom-left corner.
         if item.thumbnail != nil {
-            let badge = NSImageView(frame: NSRect(x: (frame.width - 22) / 2,
-                                                  y: imgView.frame.maxY - 18,
+            let badge = NSImageView(frame: NSRect(x: pad + 2, y: imgView.frame.maxY - 24,
                                                   width: 22, height: 22))
             badge.image = item.icon
             addSubview(badge)
         }
 
-        let label = NSTextField(labelWithString: cellTitle(item))
-        label.font = .systemFont(ofSize: 11)
-        label.textColor = .labelColor
+        let label = cellLabel(item, size: 11)
         label.lineBreakMode = .byTruncatingTail
         label.alignment = .center
         label.frame = NSRect(x: pad, y: frame.height - pad - labelH + 2,
@@ -338,9 +329,7 @@ final class SwitcherCellView: NSView {
         icon.image = item.icon
         addSubview(icon)
 
-        let label = NSTextField(labelWithString: cellTitle(item))
-        label.font = .systemFont(ofSize: 11)
-        label.textColor = .labelColor
+        let label = cellLabel(item, size: 11)
         label.lineBreakMode = .byTruncatingTail
         label.alignment = .center
         label.maximumNumberOfLines = 2
@@ -357,7 +346,7 @@ final class SwitcherCellView: NSView {
         icon.image = item.icon
         addSubview(icon)
 
-        let space = NSTextField(labelWithString: "D\(item.item.space)")
+        let space = NSTextField(labelWithString: "S\(item.item.space)")
         space.font = .monospacedDigitSystemFont(ofSize: 10, weight: .medium)
         space.textColor = .secondaryLabelColor
         space.sizeToFit()
@@ -366,23 +355,34 @@ final class SwitcherCellView: NSView {
         space.autoresizingMask = [.minXMargin]
         addSubview(space)
 
-        let label = NSTextField(labelWithString: cellTitle(item))
-        label.font = .systemFont(ofSize: 12)
-        label.textColor = .labelColor
+        let label = cellLabel(item, size: 12)
         label.lineBreakMode = .byTruncatingTail
         label.frame = NSRect(x: 34, y: (frame.height - 16) / 2,
                              width: space.frame.minX - 42, height: 16)
         addSubview(label)
     }
 
-    private func cellTitle(_ item: SwitcherDisplayItem) -> String {
-        let t = item.item.title
-        if t.isEmpty || t == item.item.app { return item.item.app }
-        return "\(item.item.app) — \(t)"
+    /// Keyword (e.g. project name) first in semibold, app dimmed after it;
+    /// the full title is on the tooltip.
+    private func cellLabel(_ item: SwitcherDisplayItem, size: CGFloat) -> NSTextField {
+        let it = item.item
+        let text = NSMutableAttributedString(string: it.keyword, attributes: [
+            .font: NSFont.systemFont(ofSize: size, weight: .semibold),
+            .foregroundColor: NSColor.labelColor,
+        ])
+        if it.keyword != it.app {
+            text.append(NSAttributedString(string: "  ·  \(it.app)", attributes: [
+                .font: NSFont.systemFont(ofSize: size),
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ]))
+        }
+        let label = NSTextField(labelWithAttributedString: text)
+        label.toolTip = it.title.isEmpty ? it.app : "\(it.app) — \(it.title)"
+        return label
     }
 
     private func addSpaceTag(_ item: SwitcherDisplayItem) {
-        let tag = NSTextField(labelWithString: "D\(item.item.space)")
+        let tag = NSTextField(labelWithString: "S\(item.item.space)")
         tag.font = .monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
         tag.textColor = .white
         tag.wantsLayer = true
@@ -415,6 +415,31 @@ final class SwitcherCellView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) { onHover(index) }
+
+    /// Set in sticky (sectioned) mode: a press that moves past the threshold
+    /// becomes a drag instead of a click.
     override func mouseDown(with event: NSEvent) { onClick(index) }
     @objc private func closeTapped() { onClose(index) }
+}
+
+/// The switcher's search box (top of the content, flipped coordinates).
+func addSwitcherSearchBox(to content: NSView, width: CGFloat, query: String) {
+    let box = NSView(frame: CGRect(x: 0, y: 0, width: width, height: 30))
+    box.wantsLayer = true
+    box.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.16).cgColor
+    box.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+    box.layer?.borderWidth = 1
+    box.layer?.cornerRadius = 8
+    content.addSubview(box)
+    let icon = NSImageView(frame: CGRect(x: 10, y: 6, width: 18, height: 18))
+    icon.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: L10n.t("ui.switcher.searchPlaceholder"))
+    icon.contentTintColor = query.isEmpty ? .tertiaryLabelColor : .labelColor
+    icon.imageScaling = .scaleProportionallyUpOrDown
+    content.addSubview(icon)
+    let q = NSTextField(labelWithString: query.isEmpty ? L10n.t("ui.switcher.searchPlaceholder") : query)
+    q.font = .systemFont(ofSize: 14, weight: .medium)
+    q.textColor = query.isEmpty ? .tertiaryLabelColor : .labelColor
+    q.lineBreakMode = .byTruncatingHead
+    q.frame = CGRect(x: 34, y: 5, width: width - 44, height: 20)
+    content.addSubview(q)
 }

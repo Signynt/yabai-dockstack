@@ -5,8 +5,13 @@ public struct SpaceInfo: Equatable {
     public let index: Int
     public let display: Int
     public let isVisible: Bool
-    public init(index: Int, display: Int, isVisible: Bool) {
+    public let isNativeFullscreen: Bool
+    /// The space the user is on (visible on the focused display).
+    public let hasFocus: Bool
+    public init(index: Int, display: Int, isVisible: Bool, isNativeFullscreen: Bool = false,
+                hasFocus: Bool = false) {
         self.index = index; self.display = display; self.isVisible = isVisible
+        self.isNativeFullscreen = isNativeFullscreen; self.hasFocus = hasFocus
     }
 
     /// Tolerant decode: skips malformed entries, returns [] on bad JSON.
@@ -19,7 +24,9 @@ public struct SpaceInfo: Equatable {
                 return nil
             }
             return SpaceInfo(index: index, display: display,
-                             isVisible: s["is-visible"] as? Bool ?? false)
+                             isVisible: s["is-visible"] as? Bool ?? false,
+                             isNativeFullscreen: s["is-native-fullscreen"] as? Bool ?? false,
+                             hasFocus: s["has-focus"] as? Bool ?? false)
         }
     }
 }

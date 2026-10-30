@@ -4,6 +4,10 @@ public enum IndicatorStyle: String, Codable { case icon, flag }
 
 public struct AppConfig: Codable, Equatable {
     public var yabaiPath: String
+    /// Opt in to importing and writing the user's yabairc. Off for new and existing configs.
+    public var manageYabaiConfig: Bool
+    /// Opt in to importing and writing skhdrc, including shortcut edits.
+    public var manageSkhdConfig: Bool
     public var socketPath: String
     public var style: IndicatorStyle
     public var cellSize: Double
@@ -31,9 +35,28 @@ public struct AppConfig: Codable, Equatable {
     /// Make the stack indicator non-interactive: clicks pass through to the
     /// window underneath, and there are no hover tooltips or click-to-focus.
     public var indicatorClickThrough: Bool
+    /// ⌃-drag an indicator cell to reorder the windows of its yabai stack.
+    public var indicatorDragReorder: Bool
     /// Show a window-preview popover when hovering a Dock app icon
     /// (needs Accessibility + Screen Recording).
     public var dockPreview: Bool
+    /// Open the menu-bar window menu when the pointer rests on the status icon.
+    public var menuOpenOnHover: Bool
+    /// Per-display window strip under the menu bar.
+    public var windowStrip: Bool
+    /// Window strip size multiplier (1 = 24 pt tall).
+    public var windowStripScale: Double
+    /// Size yabai's left/right/top padding (at runtime) so indicators and the
+    /// window strip never cover apps; restored when turned off or on quit.
+    public var autoPadding: Bool
+    /// Hyper Key source: a `HyperSource` raw value ("none" = off).
+    public var hyperKey: String
+    /// Tap-alone action: a `HyperQuickPress` raw value.
+    public var hyperQuickPress: String
+    /// Hyper = ⌃⌥⌘⇧ when true, ⌃⌥⌘ when false.
+    public var hyperIncludeShift: Bool
+    /// Show ⌃⌥⌘⇧ as ✦ in shortcut displays.
+    public var hyperShowSymbol: Bool
     /// UI language: "auto" (follow system), "en", "zh-Hant", or "ja".
     public var language: String
     /// Master toggle for the AltTab-style window switcher.
@@ -49,16 +72,18 @@ public struct AppConfig: Codable, Equatable {
     public var switcherHotkeyApp: String
     public var switcherHotkeySpace: String
     /// Focus the destination space after a Spaces View window drop.
-    public var spacesViewFocusDestination: Bool
+    public var switcherFollowMove: Bool
     /// Show the current macOS desktop wallpaper behind Spaces View.
-    public var spacesViewWallpaper: Bool
+    public var switcherWallpaper: Bool
     /// User-selected wallpaper file used by Spaces View.
-    public var spacesViewWallpaperPath: String
+    public var switcherWallpaperPath: String
     /// User-selected dark appearance wallpaper file used by Spaces View.
-    public var spacesViewWallpaperDarkPath: String
+    public var switcherWallpaperDarkPath: String
 
     public static let defaults = AppConfig(
         yabaiPath: "/opt/homebrew/bin/yabai",
+        manageYabaiConfig: false,
+        manageSkhdConfig: false,
         socketPath: "/tmp/yabai-dockstack.sock",
         style: .icon, cellSize: 32, offset: 4,
         focusedAlpha: 1.0, unfocusedAlpha: 0.4,
@@ -70,7 +95,16 @@ public struct AppConfig: Codable, Equatable {
         backgroundColor: "#1E1E1ECC",
         confineToGap: true,
         indicatorClickThrough: false,
+        indicatorDragReorder: true,
         dockPreview: true,
+        menuOpenOnHover: false,
+        windowStrip: false,
+        windowStripScale: 0.8,
+        autoPadding: false,
+        hyperKey: "none",
+        hyperQuickPress: "none",
+        hyperIncludeShift: true,
+        hyperShowSymbol: false,
         language: "auto",
         switcherEnabled: true,
         switcherAppearance: "thumbnails",
@@ -79,10 +113,10 @@ public struct AppConfig: Codable, Equatable {
         switcherHotkeyAll: "alt - tab",
         switcherHotkeyApp: "alt - 0x32",
         switcherHotkeySpace: "",
-        spacesViewFocusDestination: false,
-        spacesViewWallpaper: false,
-        spacesViewWallpaperPath: "",
-        spacesViewWallpaperDarkPath: "")
+        switcherFollowMove: false,
+        switcherWallpaper: false,
+        switcherWallpaperPath: "",
+        switcherWallpaperDarkPath: "")
 
     public static func load(from data: Data?) -> AppConfig {
         guard let data,

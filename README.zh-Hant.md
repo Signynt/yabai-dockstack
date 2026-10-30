@@ -28,12 +28,20 @@ dock 預覽、視窗切換器、cmd-tab 替代、選單列、Mission Control 替
 
 這是用 Swift 重寫的乾淨版本,**不是** stackline 的 fork(stackline 需要 Hammerspoon)。
 
-## 最新變更 — v0.2.16
+## 最新變更 — v0.3.2
 
-- 新增 **指示器可穿透點擊** 選項:點擊會傳到 stack 指示器下方的視窗(指示器本身不再懸停/點擊)。
-- 修正 stack 指示器**殘留或顯示錯誤 stack** 的問題(置頂視窗、其他空間同位置的 stack)。
-- **免 SIP 的空間移動**更穩定。
-- v0.2.12 新增 **AltTab 風格視窗切換器**(見下)。
+v0.3.2 修正鍵盤設定裡尚未設定快捷鍵的列,「Record Hotkey」按鈕會跟其他列對齊。
+以下是 v0.3.1 帶來的更新:
+
+- **視窗置頂**(#7,需要 yabai scripting addition)—— Window Rules 新增模式,讓某個 app
+  永遠浮在其他視窗上面;也有快捷鍵可以置頂 / 取消置頂目前的視窗。
+- **視窗列** —— 跟著系統亮色 / 暗色切換;空的 space 也會顯示成小格子;可以跨螢幕拖曳
+  (拖曳時有個標籤分身跟著游標);hover 出現 ✕ 可直接關閉視窗。
+- **搜尋式切換器**(感謝 @Signynt,#6)—— 快捷鍵改成開 / 關切換,切換 space 時不會關閉,
+  開啟更快;⌘⌫ 清空搜尋、⌥⌫ 刪除一個字。
+
+v0.3.0 新增的 Spaces 風格搜尋式切換器、拖曳視窗到其他 space、依專案顯示標籤、視窗列、
+Hyper Key 和自動調整 padding,請見 changelog。
 
 完整紀錄:[CHANGELOG.md](CHANGELOG.md) ·
 [Releases](https://github.com/z20240/yabai-dockstack/releases)
@@ -59,6 +67,44 @@ dock 預覽、視窗切換器、cmd-tab 替代、選單列、Mission Control 替
 **Dock 視窗預覽** —— 滑鼠移到 Dock 圖示偏看該 app 的視窗,點一下跳轉。
 
 <img src="assets/demo-dock-previews.gif" width="760" alt="Dock 視窗預覽 demo" />
+
+**依專案顯示標籤** —— 每個 VS Code 視窗都顯示自己的專案名稱。
+
+<img src="assets/demo-project-labels.jpg" width="760" alt="切換器標題以專案名稱開頭" />
+
+**視窗列** —— 選單列下方顯示每個螢幕的視窗與所在 space。
+
+<img src="assets/demo-window-strip.jpg" width="628" alt="每個螢幕選單列下方的視窗列" />
+
+**按住 ⌃ 拖曳調整 stack 順序** —— 直接在指示器上操作。
+
+<img src="assets/demo-drag-reorder.gif" width="128" alt="按住 ctrl 拖曳指示器圖示調整 stack 順序" />
+
+**搜尋式切換器** —— 用你設定的「搜尋式切換器」熱鍵打開(Settings → Switcher):每個 space
+顯示成一張迷你桌面,依顯示器分組。
+
+<img src="assets/demo-search-switcher.jpg" width="760" alt="搜尋式切換器:每個 space 是一張迷你桌面,依顯示器分組" />
+
+**打字篩選** —— 不符合的視窗會在原位變淡。
+
+<img src="assets/demo-search-filter.gif" width="760" alt="在搜尋式切換器打字,不符合的視窗變淡" />
+
+**拖曳視窗到其他 space** —— 即使它不在目前的 space。SIP 開著時會跳過去再走回來(如圖);
+有 yabai scripting addition 時瞬間完成——見 [@Signynt 的示範](#拖曳視窗到其他-space)。
+
+<img src="assets/demo-drag-to-space.gif" width="760" alt="在搜尋式切換器把視窗拖到另一個 space" />
+
+**也可以從視窗列拖** —— 把 chip 拖到另一個 space。
+
+<img src="assets/demo-strip-drag-to-space.gif" width="760" alt="把視窗列的 chip 拖到另一個 space" />
+
+**Hyper Key** —— 把 Caps Lock(或右側修飾鍵)變成 ⌃⌥⌘⇧。
+
+<img src="assets/demo-hyper-key.jpg" width="380" alt="Hyper Key 設定" />
+
+**自動調整 yabai 的 padding** —— Settings → Appearance;指示器和視窗列有自己的空間,不再壓到 App。
+
+<img src="assets/demo-auto-padding.jpg" width="380" alt="Settings → Appearance 的自動調整 yabai padding 選項" />
 
 ## 需求
 
@@ -165,6 +211,60 @@ space 並聚焦。
   預覽面板原地更新。關到該 app 的**最後一個**視窗時會直接結束整個 App——
   像 Music 這種關窗只是隱藏的 app 也能真正關掉。
 - **開關**:Settings →「Dock window previews」(預設開啟)。
+
+## 視窗列與滑鼠停留選單
+
+兩者預設關閉,在 **Settings → Appearance** 開啟。
+
+- **視窗列**:每個螢幕一條,就在選單列正下方。列出**該螢幕**(所有 space)上的每個
+  視窗:圖示+標籤(編輯器顯示專案名稱),space 之間以分隔線隔開;目前的 space 有底色、
+  聚焦中的視窗有外框。滑鼠停在 chip 上顯示完整標題與 space,點一下跳轉。視窗太多時
+  標籤先縮短、再只剩圖示,最後出現 **+N**(點了打開視窗選單)。在 Settings 拖曳
+  **視窗列大小** 即可調整尺寸。把 **chip 拖到** 另一個 space 的區段即可移動視窗(拖曳時空的
+  space 會展開成放置區)。原生全螢幕 space 會自動隱藏;可能會蓋住視窗頂端——
+  可勾選 Settings → Appearance 的 **自動調整 yabai 的 padding**,或自行調高 yabai 的 `top_padding`。
+- **自動調整 padding**(選用,預設關閉):app 執行時把 yabai 的 `left_padding` / `right_padding`
+  設成圖標大小 + 2,視窗列開著時把 `top_padding` 設成視窗列高度 + 6,讓兩者都不會蓋到 App。
+  會跟著圖標大小和視窗列大小變化(圖標變小 padding 也變小),只用 `yabai -m config` 套用,
+  不改 yabairc;取消勾選或結束 app 時還原你原本的值。三欄以上排列時,夾在中間的 stack
+  圖標仍可能壓到隔壁視窗(`window_gap` 不會調整)。
+- **滑鼠停留展開**:游標停在選單列圖示上 ¼ 秒就展開視窗選單。選單也有快捷鍵
+  (Settings → Keyboard →「Open window menu」)。
+
+## 拖曳視窗到其他 space
+
+Mission Control 只能把**目前** space 的視窗拖走。打開**搜尋式切換器**(Settings → Switcher
+→「搜尋式切換器」熱鍵):每個 space 顯示成一張迷你桌面,依顯示器分組,裡面排著它的視窗
+(來自 @Signynt 的 Spaces View,#4)。每個視窗有一個膠囊標籤,顯示 App 圖示和專案名稱;
+目前所在的 space 標示 **目前**。直接打字篩選,不符合的視窗會變淡。方向鍵 / Enter / 點擊
+focus 視窗;點卡片的空白處會跳到那個 space。
+
+- **拖曳視窗**到另一個 space 就移過去,也能拖進你目前所在的 space。在視窗列拖曳 chip 也一樣。
+  - 有 yabai scripting addition:瞬間移動,切換器保持開著,可以連續移好幾個視窗。在
+    Settings → Switcher 打開 **拖到其他 space 後跟著視窗過去** 則會跟著跳過去。
+  - SIP 開著:切換器會關閉,app 先 focus 該視窗(跳到它的 space),再用和「移到 space」
+    快捷鍵相同的模擬手勢帶過去——你會看到它移動的過程——最後停在目標 space。縮到系統匣
+    的視窗無法用這種方式移動。
+- **拖曳整個 space** 到另一個 space 會交換兩邊的視窗。**需要 scripting addition**;SIP
+  開著時拖曳 space 沒有作用。
+- 有 scripting addition 時,移動和交換的樣子(影片由 @Signynt 錄製,來自 #4):
+
+https://github.com/user-attachments/assets/2ed311f6-c563-4742-a8aa-2d875b0b4ad8
+
+- 可選擇在卡片後面顯示桌布(Settings → Switcher,可分別指定淺色和深色圖片)。
+
+## Hyper Key
+
+選用,**預設關閉**(Settings → **Hyper Key**)。按住指定的鍵等同同時按住 ⌃⌥⌘⇧,
+可以綁很多不衝突的快捷鍵(skhd 寫法:`hyper - h`)。
+
+- **按鍵**:無 / Caps Lock / 右 ⌘ / 右 ⌥ / 右 ⌃。
+- **單按**(只按它):無動作 / Escape / 切換大寫鎖定(僅 Caps Lock)。
+- **包含 Shift**:關閉時只有 ⌃⌥⌘(skhd 寫成 `ctrl + alt + cmd - h`)。
+- **以 ✦ 顯示 ⌃⌥⌘⇧**(快捷鍵編輯器中)。
+- 需要 **Accessibility**。使用 `hidutil`(app 執行期間該鍵會變成 F18;你其他的
+  `hidutil` 對映會保留,我們的對映在結束時、或當機後下次啟動時移除)。
+- 若 Raycast 或 Karabiner 已提供 Hyper Key,請勿同時開啟。密碼欄位(Secure Input)中無效。
 
 ## 安裝到 Homebrew(發佈者)
 

@@ -144,4 +144,10 @@ extension FreeformImporterTests {
         XCTAssertTrue(r.newText.contains("echo done"))                   // untouched
         XCTAssertTrue(r.newText.contains(#"yabai -m rule --add app=".*" sub-layer=normal"#)) // .* untouched
     }
+
+    func testImportsPinRule() {
+        let r = FreeformImporter.importYabai(fileText: #"yabai -m rule --add app="^IINA$" manage=off sub-layer=above"#,
+                                             current: YabaiSettings.defaults)
+        XCTAssertEqual(r.settings.rules, [WindowRule(app: "^IINA$", mode: .pin)])
+    }
 }

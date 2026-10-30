@@ -24,21 +24,38 @@ public final class YabaiClient {
         return YabaiWindow.decodeList(data)
     }
 
-    public func focus(windowId: Int) {
-        _ = run(["-m", "window", "--focus", String(windowId)])
+    /// False when yabai couldn't focus it — e.g. a window an app closed to its
+    /// tray / menu bar: still listed, but without an AX reference.
+    @discardableResult
+    public func focus(windowId: Int) -> Bool {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: path)
+        proc.arguments = ["-m", "window", "--focus", String(windowId)]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
+        do { try proc.run() } catch { return false }
+        proc.waitUntilExit()
+        return proc.terminationStatus == 0
+    }
+
+    /// Swap two windows' positions (AX-based; also reorders windows inside a
+    /// stack, and works without the scripting addition).
+    public func swap(windowId: Int, with other: Int) {
+        _ = run(["-m", "window", String(windowId), "--swap", String(other)])
+    }
+
+    /// Send a window to a space (needs the scripting addition on modern macOS).
+    /// Needs the scripting addition. `focus` also follows the window there.
+    public func moveToSpace(windowId: Int, space: Int, focus: Bool = false) {
+        var args = ["-m", "window", String(windowId), "--space", String(space)]
+        if focus { args.append("--focus") }
+        _ = run(args)
     }
 
     public func focus(spaceId: Int) {
         _ = run(["-m", "space", "--focus", String(spaceId)])
     }
 
-    /// Move a window to a space. Adding --focus is opt-in because the Spaces
-    /// View normally preserves the user's current space and focused window.
-    public func moveWindow(id: Int, toSpace space: Int, focusDestination: Bool = false) {
-        var args = ["-m", "window", String(id), "--space", String(space)]
-        if focusDestination { args.append("--focus") }
-        _ = run(args)
-    }
 
     /// Close a window (AX-based; works without the scripting addition).
     public func close(windowId: Int) {
@@ -83,17 +100,6 @@ public final class YabaiClient {
         return DisplayInfo.decodeList(data)
     }
 
-    /// Move a space to the adjacent position on its current display.
-    public func moveSpace(id: Int, forward: Bool) {
-        _ = run(["-m", "space", String(id), "--move", forward ? "next" : "prev"])
-    }
-
-    /// Move a space to another display. yabai places it at the destination
-    /// display's trailing edge; callers can then apply adjacent moves.
-    public func moveSpace(id: Int, toDisplay display: Int) {
-        _ = run(["-m", "space", String(id), "--display", String(display)])
-    }
-
     /// The currently focused window, or nil if none / yabai unavailable.
     public func queryFocusedWindow() -> YabaiWindow? {
         guard let data = run(["-m", "query", "--windows", "--window"]),
@@ -106,6 +112,15 @@ public final class YabaiClient {
     /// across displays (the window lands on the target display's visible space).
     public func moveWindow(id: Int, absX: Double, absY: Double) {
         _ = run(["-m", "window", String(id), "--move", "abs:\(Int(absX)):\(Int(absY))"])
+    }
+
+    /// `yabai -m config <key>` as an integer (paddings, gaps).
+    public func configInt(_ key: String) -> Int? {
+        AutoPadding.parse(run(["-m", "config", key]).map { String(decoding: $0, as: UTF8.self) })
+    }
+
+    public func setConfig(_ key: String, _ value: Int) {
+        _ = run(["-m", "config", key, String(value)])
     }
 
     public func balance(space: Int) {

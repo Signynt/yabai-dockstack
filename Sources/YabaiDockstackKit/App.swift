@@ -19,7 +19,7 @@ public enum YabaiDockstack {
         L10n.current = L10n.resolve(AppLanguage(rawValue: config.language) ?? .auto,
                                     preferred: Locale.preferredLanguages)
 
-        if args.contains("--refresh") {
+        if args.contains("--refresh") || args.contains("--space-changed") {
             RefreshClient.sendPoke(socketPath: config.socketPath)
             return
         }
@@ -33,7 +33,11 @@ public enum YabaiDockstack {
         let client = YabaiClient(yabaiPath: resolvedYabai)
 
         let renderer = OverlayRenderer(config: config)
-        renderer.onClickWindow = { id in client.focus(windowId: id) }
+        let focuser = WindowFocuser(client: client)
+        func focusWindow(_ id: Int) {
+            DispatchQueue.global(qos: .userInitiated).async { focuser.focus(windowId: id) }
+        }
+        renderer.onClickWindow = { id in focusWindow(id) }
 
         // replay mode: render once from a JSON file, no live yabai
         if let idx = args.firstIndex(of: "--replay"), idx + 1 < args.count {
@@ -68,7 +72,9 @@ public enum YabaiDockstack {
         let skhdRcPath = ConfigPaths.resolve(candidates: ConfigPaths.skhdCandidates)
         let configEngine = ConfigEngine(yabaiPath: resolvedYabai, skhdPath: skhdPath,
                                         yabaiConfigPath: yabaiRcPath, skhdConfigPath: skhdRcPath,
-                                        scriptsDir: ConfigPaths.scriptsDir)
+                                        scriptsDir: ConfigPaths.scriptsDir,
+                                        manageYabaiConfig: config.manageYabaiConfig,
+                                        manageSkhdConfig: config.manageSkhdConfig)
 
         // Write a default config file on first run so it's discoverable/editable.
         let expandedConfig = (configPath as NSString).expandingTildeInPath
@@ -87,8 +93,12 @@ public enum YabaiDockstack {
         // One-time migration for existing users: pull recognizable hand-written bindings
         // into the managed region. No region yet => first run; the import writes only if it
         // actually matched something, so clean users' rc files stay untouched. Never auto-applies.
-        if !configEngine.hasYabaiRegion() { _ = try? configEngine.importYabai() }
-        if !configEngine.hasSkhdRegion()  { _ = try? configEngine.importSkhd()  }
+        if configEngine.manageYabaiConfig && !configEngine.hasYabaiRegion() {
+            _ = try? configEngine.importYabai()
+        }
+        if configEngine.manageSkhdConfig && !configEngine.hasSkhdRegion() {
+            _ = try? configEngine.importSkhd()
+        }
 
         // Dock window previews (gated; needs Accessibility + Screen Recording).
         let thumbCache = ThumbnailCache()
@@ -98,12 +108,8 @@ public enum YabaiDockstack {
         // plus a sticky mode reachable through the show-switcher socket command.
         // The tap is gated on yabai being present so a captured ⌘⇥ can never
         // black-hole the system switcher while yabai is down (5s heal re-checks).
-        let switcher = SwitcherController(client: client, cache: thumbCache, config: config)
-        let spacesView = SpacesController(client: client, cache: thumbCache,
-                                           focusDestination: config.spacesViewFocusDestination,
-                                           wallpaperEnabled: config.spacesViewWallpaper,
-                                           wallpaperPath: config.spacesViewWallpaperPath,
-                                           wallpaperDarkPath: config.spacesViewWallpaperDarkPath)
+        let switcher = SwitcherController(client: client, cache: thumbCache, config: config,
+                                          focuser: focuser)
         let switcherTap = SwitcherKeyTap()
         switcher.onDismiss = { switcherTap.resetMachine() }
         func ensureSwitcherTap() {
@@ -121,9 +127,12 @@ public enum YabaiDockstack {
             renderer.update(stacks)
             dockController?.warmCache()
         }
-        coordinator.onWindows = { switcher.noteWindows($0) }
-        coordinator.onSnapshot = { windows, spaces, labels in
-            spacesView.noteSnapshot(windows: windows, spaces: spaces, labels: labels)
+        let strip = WindowStripController(client: client, focuser: focuser)
+        strip.setEnabled(config.windowStrip)
+        strip.setScale(config.windowStripScale)
+        coordinator.onWindows = { windows in
+            switcher.noteWindows(windows)
+            strip.update(windows: windows)
         }
         switcherTap.onOutput = { output in
             switch output {
@@ -145,7 +154,60 @@ public enum YabaiDockstack {
             case .pass, .swallow: break
             }
         }
+        // ⌃-drag on a stack indicator: replay the move as adjacent yabai swaps,
+        // then hand focus back to whichever window had it before.
+        renderer.onReorder = { ids, from, to in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let focused = client.queryFocusedWindow()?.id
+                for step in StackReorderPlanner.swaps(ids: ids, from: from, to: to) {
+                    client.swap(windowId: step.a, with: step.b)
+                }
+                if let focused, client.queryFocusedWindow()?.id != focused {
+                    client.focus(windowId: focused)
+                }
+                coordinator.requestRefresh()
+            }
+        }
+        // Hyper Key: always applied at launch — with "none" this also removes a
+        // mapping left behind by a crash, so the source key is never stuck as F18.
+        let hyperKey = HyperKeyController()
+        func applyHyperKey() {
+            Hotkey.showHyperSymbol = config.hyperShowSymbol
+            hyperKey.apply(source: HyperSource(rawValue: config.hyperKey) ?? .none,
+                           quickPress: HyperQuickPress(rawValue: config.hyperQuickPress) ?? .none,
+                           includeShift: config.hyperIncludeShift)
+        }
+        applyHyperKey()
+        // Auto padding: yabai paddings sized for our overlays, runtime only.
+        let autoPadding = AutoPaddingController(client: client)
+        func applyAutoPadding() {
+            autoPadding.update(enabled: config.autoPadding, cellSize: config.cellSize,
+                               stripEnabled: config.windowStrip, stripScale: config.windowStripScale)
+        }
+        applyAutoPadding()
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
+            hyperKey.shutdown()
+            autoPadding.restore()
+        }
+        // SIGTERM/SIGINT skip willTerminate; restore the source key on those too.
+        var signalSources: [DispatchSourceSignal] = []
+        for sig in [SIGTERM, SIGINT] {
+            signal(sig, SIG_IGN)
+            let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            src.setEventHandler { hyperKey.shutdown(); autoPadding.restore(); exit(0) }
+            src.resume()
+            signalSources.append(src)
+        }
         let spaceMover = SpaceMover(client: client)
+        let windowSpaceMover = WindowSpaceMover(client: client, spaceMover: spaceMover)
+        switcher.mover = windowSpaceMover
+        // Same as the switcher: with the scripting addition, follow only if asked
+        // to (otherwise an instant move, no space switch); without it the
+        // SIP-free walk always ends on the target.
+        strip.onDropToSpace = { id, space in
+            windowSpaceMover.move(windowId: id, toSpace: space, follow: config.switcherFollowMove)
+        }
         let menu = MenuBarController()
         let listener = SignalListener(
             socketPath: config.socketPath,
@@ -155,17 +217,16 @@ public enum YabaiDockstack {
                     DispatchQueue.main.async { menu.openMenu() }
                 } else if cmd == "show-switcher" {
                     DispatchQueue.main.async {
-                        switcher.open(scope: .allWindows, sticky: true)
-                        spacesView.cancel()
-                    }
-                } else if cmd == "show-spaces" {
-                    DispatchQueue.main.async {
-                        if spacesView.isOpen {
-                            spacesView.cancel()
-                            return
+                        if switcher.isOpen {
+                            switcher.cancel()
+                        } else {
+                            switcher.open(scope: .allWindows, sticky: true)
                         }
-                        switcher.cancel()
-                        spacesView.open()
+                    }
+                } else if cmd == "space-changed" {
+                    DispatchQueue.main.async {
+                        switcher.noteActiveSpaceChanged()
+                        coordinator.requestRefresh()
                     }
                 } else {
                     spaceMover.handle(command: cmd)
@@ -177,7 +238,9 @@ public enum YabaiDockstack {
         menu.windowListProvider = {
             WindowMenuModel.build(client.queryWindows(), spaceLabels: client.querySpaceLabels())
         }
-        menu.onSelectWindow = { id in client.focus(windowId: id) }
+        menu.onSelectWindow = { id in focusWindow(id) }
+        menu.openOnHover = config.menuOpenOnHover
+        strip.onOverflowClick = { menu.openMenu() }
         menu.permissionWarning = {
             (config.dockPreview && !PermissionsHelper.allGranted)
                 ? L10n.t("ui.menu.grantPerms") : nil
@@ -196,7 +259,7 @@ public enum YabaiDockstack {
         // The watcher needs Accessibility; Screen Recording only affects thumbnails.
         func ensureDockController() {
             if config.dockPreview, PermissionsHelper.hasAccessibility(), dockController == nil {
-                let dc = DockPreviewController(client: client, cache: thumbCache)
+                let dc = DockPreviewController(client: client, cache: thumbCache, focuser: focuser)
                 dc.start()
                 dockController = dc
             } else if !config.dockPreview, let dc = dockController {
@@ -208,6 +271,8 @@ public enum YabaiDockstack {
             config: config,
             onChange: { newConfig in
                 config = newConfig
+                configEngine.manageYabaiConfig = config.manageYabaiConfig
+                configEngine.manageSkhdConfig = config.manageSkhdConfig
                 // Re-resolve the yabai path (blank field → auto-detect) and apply
                 // it live to the shared client, then re-register signals.
                 let resolved = YabaiLocator.resolve(configuredPath: config.yabaiPath) ?? config.yabaiPath
@@ -219,11 +284,12 @@ public enum YabaiDockstack {
                 coordinator.requestRefresh()
                 ensureDockController()
                 switcher.updateConfig(config)
-                spacesView.updateFocusDestination(config.spacesViewFocusDestination)
-                spacesView.updateWallpaper(config.spacesViewWallpaper,
-                                           path: config.spacesViewWallpaperPath,
-                                           darkPath: config.spacesViewWallpaperDarkPath)
                 ensureSwitcherTap()
+                menu.openOnHover = config.menuOpenOnHover
+                strip.setEnabled(config.windowStrip)
+                strip.setScale(config.windowStripScale)
+                applyHyperKey()
+                applyAutoPadding()
             },
             onLoginToggle: { enabled in _ = LoginItem.setEnabled(enabled) },
             loginIsEnabled: { LoginItem.isEnabled })
@@ -247,7 +313,12 @@ public enum YabaiDockstack {
         }
 
         yabaiGuide.onSetPath = { settings.show() }
-        menu.onQuit = { listener.stop(); coordinator.stop(); app.terminate(nil) }
+        menu.onQuit = { listener.stop(); coordinator.stop(); hyperKey.shutdown(); autoPadding.restore(); app.terminate(nil) }
+        menu.onRestart = {
+            listener.stop(); coordinator.stop(); hyperKey.shutdown(); autoPadding.restore()
+            Relauncher.schedule()
+            app.terminate(nil)
+        }
         menu.onOpenSettings = { settings.show() }
         menu.onOpenYabaiSetup = { yabaiGuide.show() }
         menu.onReregisterSignals = {
@@ -264,12 +335,12 @@ public enum YabaiDockstack {
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil, queue: .main) { _ in
-                spacesView.refreshActiveSpaces()
+                switcher.noteActiveSpaceChanged()
                 coordinator.requestRefresh()
             }
         DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
-            object: nil, queue: .main) { _ in spacesView.refreshWallpaper() }
+            object: nil, queue: .main) { _ in switcher.refreshWallpaper() }
 
         ensureDockController()
         ensureSwitcherTap()
@@ -304,7 +375,16 @@ public enum YabaiDockstack {
             // Activate Dock previews once Accessibility is granted (no relaunch).
             ensureDockController()
             ensureSwitcherTap()
+            // Start the Hyper Key once Accessibility is granted (no relaunch);
+            // stop it — restoring the key — if Accessibility is revoked.
+            switch HyperKeyPlan.health(configured: HyperSource(rawValue: config.hyperKey) ?? .none,
+                                       ax: PermissionsHelper.hasAccessibility(),
+                                       running: hyperKey.isRunning) {
+            case .start, .stop: applyHyperKey()
+            case .keep: break
+            }
             guard client.isAvailable() else { return }
+            autoPadding.heal()  // a yabai restart reloads yabairc over our paddings
             if !SignalInstaller.isInstalled(client: client) {
                 installSignals()
                 coordinator.requestRefresh()
@@ -313,6 +393,7 @@ public enum YabaiDockstack {
         RunLoop.main.add(signalHealth, forMode: .common)
 
         _ = menu  // retain
+        _ = signalSources
         app.run()
     }
 }

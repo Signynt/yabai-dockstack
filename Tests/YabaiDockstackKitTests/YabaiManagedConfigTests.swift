@@ -53,4 +53,13 @@ final class YabaiManagedConfigTests: XCTestCase {
         s.layout = .float
         XCTAssertEqual(YabaiManagedConfig.parse(YabaiManagedConfig.generate(s)), s)
     }
+
+    func testPinRuleFloatsAboveAndRoundTrips() {
+        var s = YabaiSettings.defaults
+        s.rules = [WindowRule(app: "IINA", mode: .pin), WindowRule(app: "Finder", mode: .float)]
+        let text = YabaiManagedConfig.generate(s)
+        XCTAssertTrue(text.contains(#"yabai -m rule --add app="IINA" manage=off sub-layer=above"#))
+        XCTAssertTrue(text.contains(#"yabai -m rule --add app="Finder" manage=off sub-layer=normal"#))
+        XCTAssertEqual(YabaiManagedConfig.parse(text), s)
+    }
 }

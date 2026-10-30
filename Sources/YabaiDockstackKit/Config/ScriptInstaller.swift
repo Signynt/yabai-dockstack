@@ -4,8 +4,8 @@ public enum ScriptInstaller {
     public static let scriptNames = [
         "focusWindow.sh", "moveWindowToLeft.sh", "moveWindowToRight.sh",
         "moveWindowOnDisplaySpace.sh", "moveWindowToSpace.sh",
-        "openWindowMenu.sh", "openWindowSwitcher.sh", "openSpacesView.sh",
-        "taggleShowHideDesktop.sh", "windowFocusOnDestroy.sh",
+        "openWindowMenu.sh", "openWindowSwitcher.sh",
+        "taggleShowHideDesktop.sh", "windowFocusOnDestroy.sh", "togglePinWindow.sh",
     ]
 
     /// Locate a bundled script across SwiftPM's bundle layouts: flat CLT builds

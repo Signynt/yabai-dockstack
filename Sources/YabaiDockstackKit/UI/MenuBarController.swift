@@ -5,6 +5,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     private let menu = NSMenu()
 
     public var onQuit: (() -> Void)?
+    public var onRestart: (() -> Void)?
     public var onOpenSettings: (() -> Void)?
     public var onReregisterSignals: (() -> Void)?
     public var onSelectWindow: ((Int) -> Void)?
@@ -15,6 +16,13 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     /// True → show a prominent "yabai not found — set up…" item.
     public var yabaiMissing: (() -> Bool)?
     public var onOpenYabaiSetup: (() -> Void)?
+    /// Open the menu when the pointer rests on the status icon (no click).
+    public var openOnHover = false {
+        didSet { if openOnHover != oldValue { updateHoverMonitors() } }
+    }
+    private var hoverTimer: Timer?
+    private var hoverMonitors: [Any] = []
+    private var hover = HoverOpenLogic()
 
     public override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -29,6 +37,76 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         menu.delegate = self
         statusItem.menu = menu
         rebuild()
+    }
+
+    // MARK: - Hover to open
+    //
+    // A tracking area on the status button never fires (it's added while the
+    // button is still zero-height, and NSStatusBarButton doesn't refresh it), so
+    // watch mouse moves instead — global for other apps' windows, local for ours.
+
+    private func updateHoverMonitors() {
+        hoverMonitors.forEach(NSEvent.removeMonitor)
+        hoverMonitors = []
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        _ = hover.pointer(inside: false)
+        guard openOnHover else { return }
+        if let g = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: { [weak self] _ in
+            self?.checkPointer()
+        }) { hoverMonitors.append(g) }
+        if let l = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved, handler: { [weak self] e in
+            self?.checkPointer(); return e
+        }) { hoverMonitors.append(l) }
+    }
+
+    private var buttonScreenRect: NSRect? {
+        guard let button = statusItem.button, let win = button.window else { return nil }
+        return win.convertToScreen(button.convert(button.bounds, to: nil))
+    }
+
+    /// Where the icon is drawn on the screen under the pointer. The real button
+    /// only lives on the active display's menu bar; other menu bars draw a copy
+    /// at the same distance from their right edge. `onButtonScreen` is false for
+    /// such a copy.
+    private func hoverTarget() -> (rect: NSRect, screen: NSScreen, onButtonScreen: Bool)? {
+        let mouse = NSEvent.mouseLocation
+        guard let icon = buttonScreenRect,
+              let buttonScreen = statusItem.button?.window?.screen,
+              let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) else { return nil }
+        let rect = HoverOpenLogic.mirrored(icon, from: buttonScreen.frame, to: screen.frame)
+        return (rect, screen, screen == buttonScreen)
+    }
+
+    private var pointerOnIcon: Bool {
+        hoverTarget()?.rect.contains(NSEvent.mouseLocation) ?? false
+    }
+
+    private func checkPointer() {
+        let inside = pointerOnIcon
+        guard inside != hover.inside else { return }
+        if !inside { hoverTimer?.invalidate(); hoverTimer = nil }
+        guard hover.pointer(inside: inside) else { return }
+        hoverTimer?.invalidate()
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
+            guard let self, self.hover.timerFired(pointerInside: self.pointerOnIcon),
+                  let target = self.hoverTarget() else { return }
+            if target.onButtonScreen {
+                self.openMenu()
+            } else {
+                // Clicking the copy would first switch the active display; pop
+                // the same menu right under the copy instead.
+                let f = target.screen.frame, vf = target.screen.visibleFrame
+                let menuBarBottom = vf.maxY < f.maxY ? vf.maxY : f.maxY - NSStatusBar.system.thickness
+                self.menu.popUp(positioning: nil, at: NSPoint(x: target.rect.minX, y: menuBarBottom), in: nil)
+            }
+        }
+    }
+
+    public func menuDidClose(_ menu: NSMenu) {
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        hover.menuClosed(pointerInside: pointerOnIcon)
     }
 
     // Rebuild dynamic contents whenever the menu is about to open.
@@ -99,9 +177,12 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
                 for space in display.spaces {
                     menu.addItem(disabledHeader(space.name, indent: 1))
                     for win in space.windows {
-                        let label = win.title.isEmpty ? win.app : "\(win.app) — \(win.title)"
+                        let label = win.keyword != win.app
+                            ? "\(win.keyword) — \(win.app)"
+                            : (win.title.isEmpty ? win.app : "\(win.app) — \(win.title)")
                         let item = NSMenuItem(title: truncate(label),
                                               action: #selector(selectWindow(_:)), keyEquivalent: "")
+                        item.toolTip = win.title.isEmpty ? nil : win.title
                         item.target = self
                         item.indentationLevel = 2
                         item.representedObject = win.id
@@ -131,6 +212,10 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let restart = NSMenuItem(title: L10n.t("ui.menu.restart"), action: #selector(restartAction), keyEquivalent: "")
+        restart.target = self
+        menu.addItem(restart)
+
         let quit = NSMenuItem(title: L10n.t("ui.menu.quit"), action: #selector(quitAction), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -143,4 +228,5 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     @objc private func yabaiSetupAction() { onOpenYabaiSetup?() }
     @objc private func reregisterAction() { onReregisterSignals?() }
     @objc private func quitAction() { onQuit?() }
+    @objc private func restartAction() { onRestart?() }
 }

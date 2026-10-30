@@ -32,14 +32,23 @@ dock preview, window switcher, cmd-tab replacement, menu bar, Mission Control al
 
 It is a clean Swift rewrite — **not** a fork of stackline (which required Hammerspoon).
 
-## What's new — v0.2.16
+## What's new — v0.3.2
 
-- New **click-through indicator** option: clicks reach the window under the
-  stack indicator (no hover/click on the indicator itself).
-- Fixed stack indicators that **lingered or showed the wrong stack**
-  (sticky windows, same-frame stacks on other spaces).
-- More reliable **SIP-free space moves**.
-- v0.2.12 introduced the **AltTab-style window switcher** (below).
+v0.3.2 lines up the Record Hotkey button for shortcuts that have no hotkey yet.
+The rest arrived in v0.3.1:
+
+- **Pin windows on top** (#7, needs yabai's scripting addition) — a Window Rules
+  mode keeps an app above other windows, and a shortcut pins / unpins the
+  focused window.
+- **Window strip** — follows light / dark mode, shows empty spaces as small
+  slots, drags across displays (a copy of the chip follows the pointer), and
+  closes a window from its hover ✕.
+- **Search switcher** (thanks @Signynt, #6) — the hotkey toggles it, it stays
+  open across space changes and opens faster; ⌘⌫ / ⌥⌫ edit the search.
+
+New in v0.3.0: the Spaces-style search switcher, drag windows between spaces,
+project-aware labels, the window strip, Hyper Key and auto yabai padding — see
+the changelog.
 
 Full history: [CHANGELOG.md](CHANGELOG.md) ·
 [Releases](https://github.com/z20240/yabai-dockstack/releases)
@@ -66,6 +75,46 @@ Full history: [CHANGELOG.md](CHANGELOG.md) ·
 
 <img src="assets/demo-dock-previews.gif" width="760" alt="dock window previews demo" />
 
+**Project-aware labels** — every VS Code window shows its project name.
+
+<img src="assets/demo-project-labels.jpg" width="760" alt="switcher captions led by each window's project name" />
+
+**Window strip** — each display's windows and their spaces, under the menu bar.
+
+<img src="assets/demo-window-strip.jpg" width="628" alt="per-display window strip under the menu bar" />
+
+**⌃-drag to reorder a stack** — straight from its indicator.
+
+<img src="assets/demo-drag-reorder.gif" width="128" alt="control-drag an indicator icon to reorder the stack" />
+
+**Search switcher** — open it with your "Search switcher" hotkey (Settings →
+Switcher): every space as a mini desktop, grouped by display.
+
+<img src="assets/demo-search-switcher.jpg" width="760" alt="search switcher: every space as a mini desktop with its windows, grouped by display" />
+
+**Type to filter** — windows that don't match dim in place.
+
+<img src="assets/demo-search-filter.gif" width="760" alt="typing in the search switcher dims the windows that don't match" />
+
+**Drag windows between spaces** — even from a space you're not on. With SIP on
+the window is walked over (shown here); with yabai's scripting addition it's
+instant — see [@Signynt's demo](#drag-windows-between-spaces).
+
+<img src="assets/demo-drag-to-space.gif" width="760" alt="dragging a window onto another space in the search switcher" />
+
+**…or from the window strip** — drop a chip on another space.
+
+<img src="assets/demo-strip-drag-to-space.gif" width="760" alt="dragging a window-strip chip onto another space" />
+
+**Hyper Key** — Caps Lock (or a right-hand modifier) as ⌃⌥⌘⇧.
+
+<img src="assets/demo-hyper-key.jpg" width="380" alt="Hyper Key settings" />
+
+**Auto-adjust yabai padding** — Settings → Appearance; indicators and the window
+strip get room of their own.
+
+<img src="assets/demo-auto-padding.jpg" width="380" alt="the Auto-adjust yabai padding option in Settings → Appearance" />
+
 ## Features
 
 - 🔄 **AltTab-style window switcher**: hold **⌥** + tap **Tab** to cycle every
@@ -79,7 +128,18 @@ Full history: [CHANGELOG.md](CHANGELOG.md) ·
   focused window highlighted. **Flag mode**: slim minimal markers. Toggle from
   the menu bar.
 - 🔎 **Hover** an indicator → popover with that window's full title.
-- 🖱️ **Click** an indicator → focus that window (via yabai).
+- 🖱️ **Click** an indicator → focus that window (via yabai); **⌃-drag** an icon
+  to reorder the stack.
+- 🏷️ **Project-aware labels**: windows of the same app are labelled by project
+  (VS Code workspace, JetBrains project, terminal folder) everywhere.
+- 📋 **Window strip** (opt-in): every window on a display, with its space
+  (empty spaces too), under that display's menu bar; hover ✕ to close, drag to
+  another space or display. **Hover-to-open** window menu (opt-in).
+- 📌 **Pin windows on top** — per app (Window Rules) or with a shortcut; needs
+  yabai's scripting addition.
+- 🫳 **Drag windows between spaces** — in the Spaces-style search switcher or
+  the window strip; works from any space, with or without SIP.
+- ✦ **Hyper Key** (opt-in): Caps Lock / right ⌘ / ⌥ / ⌃ acts as ⌃⌥⌘⇧.
 - 🖥️ Multi-monitor, all visible spaces.
 - ⌃⌘← ⌃⌘→ **Send to space hotkeys** — move windows left/right one space, or to
   a numbered space, with SIP fully enabled (simulated native gestures).
@@ -142,6 +202,17 @@ open yabai-dockstack.app
 
 ### First launch
 
+Dockstack leaves your `yabairc` untouched by default. To manage layouts, padding,
+gaps, or window rules from Settings → yabai, enable **Allow dockstack to edit yabairc**.
+The controls below it stay disabled until you opt in. Turning it off stops future
+edits and automatic imports; it preserves any existing managed section.
+
+The Keyboard tab has a separate **Allow dockstack to edit skhdrc** option, also
+off by default. Enable it to import or edit skhd shortcuts, including the search
+switcher shortcut on the Switcher tab. Turning it off preserves existing shortcuts
+and blocks future file edits. Hold-to-cycle shortcuts stored in dockstack's own
+settings and runtime automatic padding work independently of both options.
+
 On launch the app:
 
 - **auto-detects** the yabai binary (Homebrew Apple Silicon / Intel / nix, then `which`);
@@ -198,7 +269,17 @@ falls back to its default. All keys:
   "showBackground": true,
   "backgroundColor": "#1E1E1ECC",
   "confineToGap": true,
+  "indicatorClickThrough": false,
+  "indicatorDragReorder": true,
   "dockPreview": true,
+  "menuOpenOnHover": false,
+  "windowStrip": false,
+  "windowStripScale": 0.8,
+  "autoPadding": false,
+  "hyperKey": "none",
+  "hyperQuickPress": "none",
+  "hyperIncludeShift": true,
+  "hyperShowSymbol": false,
   "language": "auto",
   "switcherEnabled": true,
   "switcherAppearance": "thumbnails",
@@ -206,7 +287,11 @@ falls back to its default. All keys:
   "switcherCaptureCmdTab": false,
   "switcherHotkeyAll": "alt - tab",
   "switcherHotkeyApp": "alt - 0x32",
-  "switcherHotkeySpace": ""
+  "switcherHotkeySpace": "",
+  "switcherFollowMove": false,
+  "switcherWallpaper": false,
+  "switcherWallpaperPath": "",
+  "switcherWallpaperDarkPath": ""
 }
 ```
 
@@ -219,10 +304,26 @@ falls back to its default. All keys:
 - `showBackground`: draw a rounded backing pill behind the indicators so they read
   as a floating chip (helpful over full-width windows). `true`/`false`.
 - `backgroundColor`: backing pill color, `"#RRGGBB"` / `"#RRGGBBAA"`.
-- `switcher*`: the window switcher — `switcherAppearance` is `"thumbnails"`,
-  `"icons"` or `"titles"`; the three hotkeys use skhd notation (`"alt - tab"`;
-  `0x32` is backtick; empty string disables that scope). All editable from
-  **Settings → Switcher**.
+- `indicatorDragReorder`: ⌃-drag an indicator icon to reorder its stack
+  (ignored while `indicatorClickThrough` is on).
+- `menuOpenOnHover`: open the window menu when the pointer rests on the menu
+  bar icon. `windowStrip`: show the per-display window strip;
+  `windowStripScale`: its size (0.5–1.5, default 0.8).
+- `autoPadding`: while the app runs, set yabai's `left_padding` / `right_padding`
+  to the indicator size + 2 and, with the window strip on, `top_padding` to the
+  strip height + 6, so neither covers apps. It follows the indicator size and
+  strip size (smaller indicators, smaller padding) and is applied with
+  `yabai -m config` only — your yabairc is untouched and your own values come
+  back when you turn it off or quit. Off by default. Windows between two stacks
+  in a 3+ column layout aren't covered (`window_gap` is left alone).
+- `hyper*`: see [Hyper Key](#hyper-key).
+- `switcher*`: the window switcher — `switcherAppearance` (hold-to-cycle only)
+  is `"thumbnails"`, `"icons"` or `"titles"`; the three hotkeys use skhd notation
+  (`"alt - tab"`; `0x32` is backtick; empty string disables that scope).
+  `switcherFollowMove`: with the scripting addition, follow a window dragged to
+  another space in the search switcher. `switcherWallpaper` + `…Path` /
+  `…DarkPath`: image files shown behind the search switcher's space cards. All
+  editable from **Settings → Switcher**.
 
 Most of these are adjustable from **Settings…** in the menu bar (no file editing
 needed). The config file is still created automatically on first launch at
@@ -355,23 +456,6 @@ ordered most-recently-used:
 - **Permissions:** hold-to-cycle uses a global event tap → **Accessibility**.
   Sticky mode via the menu/skhd needs none beyond yabai itself.
 
-## Spaces View
-
-Open **Spaces View** from **Settings → Keyboard** or run
-`sh ~/.config/yabai-dockstack/scripts/openSpacesView.sh`. It shows every space,
-grouped by display, with the windows currently assigned to each space.
-
-- Drag a window preview onto another space to move it there. The current focus is
-  preserved by default; enable **Focus destination after moving a window** in
-  **Settings → Switcher** to focus the destination instead.
-- Drag a space card onto another space to move all of its windows there. This
-  works for any destination, without depending on adjacent-space commands.
-- Space cards show thumbnail-only previews. Visible windows use live or cached
-  thumbnails; hidden-space windows use the last cached thumbnail, or an app icon
-  when no capture is available.
-- Moving windows between spaces requires a working yabai instance. Sticky windows
-  retain their sticky behavior when moved.
-
 ## Dock window previews
 
 Hover a **Dock app icon** to pop up that app's windows across all spaces; click one
@@ -394,6 +478,70 @@ to jump to its space and focus it (like a Windows-taskbar peek / DockView).
   in place. Closing the app's **last** window quits the app itself, so apps that
   merely hide their window on close (Music, …) actually go away.
 - **Toggle:** Settings → **Dock window previews** (on by default).
+
+## Window strip & hover menu
+
+Both are off by default — turn them on in **Settings → Appearance**.
+
+- **Window strip**: one strip per display, right under the menu bar. It lists
+  every window on *that* display (all of its spaces) as icon + label (the
+  project name for editors), with a divider between spaces; the current space
+  is highlighted and the focused window outlined. Hover a chip for the full
+  title and space, click to jump. With many windows the labels shorten, then
+  only icons remain, then a **+N** chip opens the window menu. Drag **Window
+  strip size** in Settings to resize it. **Drag a chip** onto another space's
+  section to move the window there (empty spaces open up as drop slots while
+  you drag). It hides over native-fullscreen
+  spaces and may cover the top of windows — turn on **Auto-adjust yabai
+  padding** (Settings → Appearance) or raise yabai's `top_padding`.
+- **Hover to open**: rest the pointer on the menu bar icon for ¼ s and the
+  window menu opens. The menu also has a hotkey (Settings → Keyboard →
+  "Open window menu").
+
+## Drag windows between spaces
+
+Mission Control only lets you drag windows *from the current* space. Open the
+**search switcher** (Settings → Switcher → "Search switcher" hotkey): every
+space is shown as a mini desktop, grouped by display, with its windows tiled
+inside (based on @Signynt's Spaces View, #4). Each window carries a capsule with
+its app icon and project name; the space you're on is marked **Current**. Type
+to filter — windows that don't match are dimmed. Arrow keys / Enter / click
+focus a window; clicking an empty part of a card goes to that space.
+
+- **Drag a window** onto another space to move it there, including into the
+  space you're on. The same works by dragging a chip in the window strip.
+  - With yabai's scripting addition: the move is instant and the switcher
+    stays open, so you can move several windows. Turn on **Follow a window
+    dragged to another space** (Settings → Switcher) to go with it instead.
+  - With SIP on: the switcher closes, the app focuses the window (jumping to its
+    space) and walks it over with the same simulated gesture as the
+    send-to-space hotkeys — you'll see it travel — and you end on the
+    destination space. Windows closed to the tray can't be moved this way.
+- **Drag a whole space** onto another to swap their windows. **Requires the
+  scripting addition**; with SIP on, dragging a space does nothing.
+- With the scripting addition, moves and swaps look like this (video by
+  @Signynt, from #4):
+
+https://github.com/user-attachments/assets/2ed311f6-c563-4742-a8aa-2d875b0b4ad8
+
+- Optional wallpaper behind the cards (Settings → Switcher; pick a light and a
+  dark image).
+
+## Hyper Key
+
+Optional, **off by default** (Settings → **Hyper Key**). Holding the chosen key
+acts as ⌃⌥⌘⇧ held together, so you can bind lots of conflict-free shortcuts
+(skhd: `hyper - h`).
+
+- **Key**: None / Caps Lock / Right ⌘ / Right ⌥ / Right ⌃.
+- **Quick press** (tap alone): Nothing / Escape / Toggle Caps Lock (Caps Lock only).
+- **Include Shift**: off → ⌃⌥⌘ only (bind it in skhd as `ctrl + alt + cmd - h`).
+- **Show ⌃⌥⌘⇧ as ✦** in the shortcut editor.
+- Needs **Accessibility**. Uses `hidutil` (the chosen key becomes F18 while the
+  app runs; your other `hidutil` mappings are kept and ours is removed on quit
+  and on the next launch after a crash).
+- Don't enable it if Raycast or Karabiner already gives you a Hyper Key.
+  Doesn't apply in password fields (Secure Input).
 
 ## Is it safe? (signing & permissions)
 

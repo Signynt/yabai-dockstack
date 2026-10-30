@@ -15,7 +15,7 @@ final class ShortcutCatalogTests: XCTestCase {
 
     func testCoreActionsPresent() {
         for id in ["restart-services", "toggle-show-desktop", "close-window",
-                   "open-spaces-view", "focus-left", "stack-west", "send-space-1", "grid-top-left"] {
+                   "focus-left", "stack-west", "send-space-1", "grid-top-left"] {
             XCTAssertNotNil(ShortcutCatalog.action(id: id), "missing \(id)")
         }
     }
@@ -51,5 +51,13 @@ final class ShortcutCatalogTests: XCTestCase {
         for a in ShortcutCatalog.all {
             XCTAssertFalse(a.symbol.isEmpty, "\(a.id) missing symbol")
         }
+    }
+
+    func testPinWindowShortcutHasNoDefaultHotkey() {
+        let a = ShortcutCatalog.action(id: "pin-window-on-top")
+        XCTAssertEqual(a?.group, "Shared")
+        XCTAssertNil(a?.defaultHotkey)
+        XCTAssertEqual(a?.command, "sh ${SCRIPTS}/togglePinWindow.sh")
+        XCTAssertTrue(ScriptInstaller.scriptNames.contains("togglePinWindow.sh"))
     }
 }

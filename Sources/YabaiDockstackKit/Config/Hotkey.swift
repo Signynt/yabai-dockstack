@@ -8,6 +8,13 @@ public struct Hotkey: Equatable, Hashable {
     public init(mods: Set<Mod>, key: String) { self.mods = mods; self.key = key }
 
     private static let order: [Mod] = [.ctrl, .shift, .alt, .cmd]
+    /// skhd's modifier aliases.
+    private static let aliases: [String: Set<Mod>] = [
+        "hyper": [.ctrl, .shift, .alt, .cmd],
+        "meh": [.ctrl, .shift, .alt],
+    ]
+    /// Render ⌃⇧⌥⌘ as ✦ (Settings → Hyper Key). Main-thread UI state.
+    public static var showHyperSymbol = false
 
     public static func parse(_ s: String) -> Hotkey? {
         // Split on the LAST " - " so mod separators ("+") aren't confused.
@@ -19,6 +26,7 @@ public struct Hotkey: Equatable, Hashable {
         if !lhs.isEmpty {
             for token in lhs.split(separator: "+") {
                 let t = token.trimmingCharacters(in: .whitespaces)
+                if let group = aliases[t] { mods.formUnion(group); continue }
                 guard let m = Mod(rawValue: t) else { return nil }
                 mods.insert(m)
             }
@@ -34,7 +42,9 @@ public struct Hotkey: Equatable, Hashable {
 
     public var displayString: String {
         let glyphs: [Mod: String] = [.ctrl: "⌃", .shift: "⇧", .alt: "⌥", .cmd: "⌘"]
-        let mp = Hotkey.order.filter { mods.contains($0) }.map { glyphs[$0]! }.joined()
+        let mp = Hotkey.showHyperSymbol && mods == Set(Hotkey.order)
+            ? "✦"
+            : Hotkey.order.filter { mods.contains($0) }.map { glyphs[$0]! }.joined()
         let keyGlyph: String
         switch key.lowercased() {
         case "left": keyGlyph = "←"

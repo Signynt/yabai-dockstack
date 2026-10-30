@@ -6,6 +6,8 @@ public enum WindowMenuModel {
         public let app: String
         public let title: String
         public let focused: Bool
+        /// Short distinguishing label (e.g. project name); see `WindowLabeler`.
+        public let keyword: String
     }
     public struct SpaceGroup: Equatable {
         public let space: Int
@@ -23,13 +25,15 @@ public enum WindowMenuModel {
     /// index to its custom yabai label; spaces without one show "Space N".
     public static func build(_ windows: [YabaiWindow],
                              spaceLabels: [Int: String] = [:]) -> [DisplayGroup] {
+        let keywords = WindowLabeler.keywords(windows)
         let byDisplay = Dictionary(grouping: windows, by: { $0.display })
         return byDisplay.keys.sorted().map { display in
             let bySpace = Dictionary(grouping: byDisplay[display] ?? [], by: { $0.space })
             let spaces = bySpace.keys.sorted().map { space -> SpaceGroup in
                 let wins = (bySpace[space] ?? [])
                     .sorted { ($0.stackIndex, $0.id) < ($1.stackIndex, $1.id) }
-                    .map { Entry(id: $0.id, pid: $0.pid, app: $0.app, title: $0.title, focused: $0.hasFocus) }
+                    .map { Entry(id: $0.id, pid: $0.pid, app: $0.app, title: $0.title, focused: $0.hasFocus,
+                                 keyword: keywords[$0.id] ?? $0.app) }
                 let label = spaceLabels[space]
                 let name = (label?.isEmpty == false) ? label! : "Space \(space)"
                 return SpaceGroup(space: space, name: name, windows: wins)

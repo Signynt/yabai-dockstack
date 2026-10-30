@@ -2,6 +2,28 @@ import XCTest
 @testable import YabaiDockstackKit
 
 final class AppConfigTests: XCTestCase {
+    func testSkhdManagementRequiresExplicitOptInAndPersistsIndependently() throws {
+        XCTAssertFalse(AppConfig.defaults.manageSkhdConfig)
+        XCTAssertFalse(AppConfig.load(from: nil).manageSkhdConfig)
+        XCTAssertFalse(AppConfig.load(from: Data(#"{"manageYabaiConfig":true}"#.utf8)).manageSkhdConfig)
+        var config = AppConfig.defaults
+        config.manageSkhdConfig = true
+        let loaded = AppConfig.load(from: try JSONEncoder().encode(config))
+        XCTAssertTrue(loaded.manageSkhdConfig)
+        XCTAssertFalse(loaded.manageYabaiConfig)
+        config.manageSkhdConfig = false
+        XCTAssertFalse(AppConfig.load(from: try JSONEncoder().encode(config)).manageSkhdConfig)
+    }
+    func testYabaiManagementRequiresExplicitOptInAndPersists() throws {
+        XCTAssertFalse(AppConfig.defaults.manageYabaiConfig)
+        XCTAssertFalse(AppConfig.load(from: nil).manageYabaiConfig)
+        XCTAssertFalse(AppConfig.load(from: Data(#"{"cellSize":24}"#.utf8)).manageYabaiConfig)
+        var config = AppConfig.defaults
+        config.manageYabaiConfig = true
+        XCTAssertTrue(AppConfig.load(from: try JSONEncoder().encode(config)).manageYabaiConfig)
+        config.manageYabaiConfig = false
+        XCTAssertFalse(AppConfig.load(from: try JSONEncoder().encode(config)).manageYabaiConfig)
+    }
     func testDefaultsWhenNil() {
         let c = AppConfig.load(from: nil)
         XCTAssertEqual(c.style, .icon)
@@ -57,10 +79,10 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(c.switcherHotkeyAll, "alt - tab")
         XCTAssertEqual(c.switcherHotkeyApp, "alt - 0x32")
         XCTAssertEqual(c.switcherHotkeySpace, "")
-        XCTAssertFalse(c.spacesViewFocusDestination)
-        XCTAssertFalse(c.spacesViewWallpaper)
-        XCTAssertEqual(c.spacesViewWallpaperPath, "")
-        XCTAssertEqual(c.spacesViewWallpaperDarkPath, "")
+        XCTAssertFalse(c.switcherFollowMove)
+        XCTAssertFalse(c.switcherWallpaper)
+        XCTAssertEqual(c.switcherWallpaperPath, "")
+        XCTAssertEqual(c.switcherWallpaperDarkPath, "")
     }
 
     func testOldConfigWithoutSwitcherFieldsGetsDefaults() {
@@ -70,20 +92,28 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(c.style, .flag)
         XCTAssertTrue(c.switcherEnabled)
         XCTAssertEqual(c.switcherHotkeyAll, "alt - tab")
-        XCTAssertFalse(c.spacesViewFocusDestination)
-        XCTAssertFalse(c.spacesViewWallpaper)
+        XCTAssertFalse(c.switcherFollowMove)
+        XCTAssertFalse(c.switcherWallpaper)
     }
 
-    func testSpacesViewFocusDestinationLoads() {
-        let json = #"{"spacesViewFocusDestination":true}"#.data(using: .utf8)!
-        XCTAssertTrue(AppConfig.load(from: json).spacesViewFocusDestination)
+    func testSwitcherFollowMoveLoads() {
+        let json = #"{"switcherFollowMove":true}"#.data(using: .utf8)!
+        XCTAssertTrue(AppConfig.load(from: json).switcherFollowMove)
     }
 
-    func testSpacesViewWallpaperLoads() {
-        let json = #"{"spacesViewWallpaper":true,"spacesViewWallpaperPath":"/tmp/wallpaper.heic","spacesViewWallpaperDarkPath":"/tmp/dark.heic"}"#.data(using: .utf8)!
+    func testSwitcherWallpaperLoads() {
+        let json = #"{"switcherWallpaper":true,"switcherWallpaperPath":"/tmp/wallpaper.heic","switcherWallpaperDarkPath":"/tmp/dark.heic"}"#.data(using: .utf8)!
         let c = AppConfig.load(from: json)
-        XCTAssertTrue(c.spacesViewWallpaper)
-        XCTAssertEqual(c.spacesViewWallpaperPath, "/tmp/wallpaper.heic")
-        XCTAssertEqual(c.spacesViewWallpaperDarkPath, "/tmp/dark.heic")
+        XCTAssertTrue(c.switcherWallpaper)
+        XCTAssertEqual(c.switcherWallpaperPath, "/tmp/wallpaper.heic")
+        XCTAssertEqual(c.switcherWallpaperDarkPath, "/tmp/dark.heic")
+    }
+
+    func testMenuHoverDefaultsOff() {
+        XCTAssertFalse(AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).menuOpenOnHover)
+    }
+
+    func testWindowStripDefaultsOff() {
+        XCTAssertFalse(AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).windowStrip)
     }
 }

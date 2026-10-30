@@ -337,8 +337,10 @@ try? FileManager.default.removeItem(atPath: engY)
 let eng = ConfigEngine(yabaiPath: "/usr/bin/true", skhdPath: "/usr/bin/true",
                        yabaiConfigPath: engY, skhdConfigPath: engY + ".s", scriptsDir: "/S")
 var es = DefaultTemplate.defaultYabaiSettings(); es.gap = 17
+eng.manageYabaiConfig = true
 try? eng.saveYabai(es)
 check(eng.loadYabaiSettings().gap == 17, "engine yabai round-trip")
+eng.manageSkhdConfig = true
 try? eng.saveSkhd([ShortcutBinding(actionID: "balance", enabled: true, hotkey: Hotkey(mods: [.alt, .cmd], key: "0x2A"))])
 let lb = eng.loadBindings()
 check(lb.count == ShortcutCatalog.all.count, "loadBindings returns a row per action")
@@ -433,6 +435,7 @@ check(ed.hasYabaiRegion() == false, "no yabai region on fresh file")
 check(ed.loadYabaiSettingsOrDefault().rules.contains { $0.app == "Finder" }, "or-default uses curated yabai default")
 check(ed.loadBindingsOrDefault().allSatisfy { $0.enabled }, "or-default bindings all enabled")
 var eds = YabaiSettings.defaults; eds.gap = 99
+ed.manageYabaiConfig = true
 try? ed.saveYabai(eds)
 check(ed.hasYabaiRegion() == true, "region present after save")
 check(ed.loadYabaiSettingsOrDefault().gap == 99, "or-default uses region when present")
@@ -498,6 +501,7 @@ try? "cmd - f3: sh ~/.config/yabai/scripts/taggleShowHideDesktop.sh\n".write(toF
 let impE = ConfigEngine(yabaiPath: "/usr/bin/true", skhdPath: "/usr/bin/true",
                         yabaiConfigPath: impP + ".y", skhdConfigPath: impP,
                         scriptsDir: "/Users/me/.config/yabai-dockstack/scripts")
+impE.manageSkhdConfig = true
 check((try? impE.importSkhd()) == 1, "engine importSkhd migrates one binding")
 let impText = (try? String(contentsOfFile: impP, encoding: .utf8)) ?? ""
 check(impText.contains("# [yabai-dockstack imported] cmd - f3:"), "engine import comments original")
@@ -513,6 +517,7 @@ try? FileManager.default.removeItem(atPath: impY)
 try? "yabai -m config window_gap 7\n".write(toFile: impY, atomically: true, encoding: .utf8)
 let impYE = ConfigEngine(yabaiPath: "/usr/bin/true", skhdPath: "/usr/bin/true",
                          yabaiConfigPath: impY, skhdConfigPath: impY + ".s", scriptsDir: "/S")
+impYE.manageYabaiConfig = true
 check((try? impYE.importYabai()) == 1, "engine importYabai migrates one setting")
 check(impYE.loadYabaiSettings().gap == 7, "engine importYabai: gap reflects imported value")
 try? FileManager.default.removeItem(atPath: impY)
@@ -523,6 +528,7 @@ try? "cmd - f3: sh ~/.config/yabai/scripts/taggleShowHideDesktop.sh\n".write(toF
 let idemE = ConfigEngine(yabaiPath: "/usr/bin/true", skhdPath: "/usr/bin/true",
                          yabaiConfigPath: idemP + ".y", skhdConfigPath: idemP,
                          scriptsDir: "/Users/me/.config/yabai-dockstack/scripts")
+idemE.manageSkhdConfig = true
 _ = try? idemE.importSkhd()
 check((try? idemE.importSkhd()) == 0, "importSkhd idempotent (second run imports nothing)")
 try? FileManager.default.removeItem(atPath: idemP)
@@ -752,6 +758,475 @@ do {
           "open-window-switcher action in catalog")
     check(ScriptInstaller.scriptNames.contains("openWindowSwitcher.sh"),
           "switcher socket script ships")
+}
+
+print("WindowLabeler")
+do {
+    func k(_ app: String, _ title: String, _ sib: [String] = []) -> String {
+        WindowLabeler.keyword(app: app, title: title, siblingTitles: sib)
+    }
+    check(k("Code", "Stack.swift — yabai-dockstack") == "yabai-dockstack", "VS Code → workspace")
+    check(k("Code", "● Stack.swift — yabai-dockstack — Visual Studio Code") == "yabai-dockstack", "VS Code dirty + app suffix → workspace")
+    check(k("Code", "deployer") == "deployer", "VS Code bare folder")
+    check(k("Cursor", "main.go — api-server") == "api-server", "Cursor → workspace")
+    check(k("IntelliJ IDEA", "shop-backend – OrderService.kt") == "shop-backend", "JetBrains → project")
+    check(k("Warp", "~/Project/yabai-dockstack") == "yabai-dockstack", "Warp → cwd leaf")
+    check(k("iTerm2", "les@mac: ~/work/foo") == "foo", "iTerm2 user@host: cwd → leaf")
+    check(k("Warp", "~") == "~", "home stays ~")
+    check(k("Notes", "Notes - Groceries", ["Notes - Work"]) == "Groceries", "siblings → differing segment")
+    check(k("Preview", "a.pdf | Page 1", ["b.pdf | Page 1"]) == "a.pdf", "siblings → first differing segment")
+    check(k("Gather", "") == "Gather", "empty title → app")
+    check(k("Safari", "Safari") == "Safari", "title == app → app")
+    check(k("Safari", "蘋果新聞") == "蘋果新聞", "CJK title kept")
+    let r = YRect(x: 0, y: 0, w: 1, h: 1)
+    let ws = [YabaiWindow(id: 1, pid: 1, app: "Code", title: "a.swift — projA", frame: r, display: 1, space: 1, stackIndex: 0, hasFocus: false),
+              YabaiWindow(id: 2, pid: 1, app: "Code", title: "b.swift — projB", frame: r, display: 1, space: 2, stackIndex: 0, hasFocus: false)]
+    check(WindowLabeler.keywords(ws) == [1: "projA", 2: "projB"], "batch keywords per window")
+    check(SwitcherModel.build(windows: ws, mru: [], scope: .allWindows).map(\.keyword) == ["projA", "projB"],
+          "switcher items carry keywords")
+    check(SwitcherModel.build(windows: ws, mru: [], scope: .allWindows, query: "projB").first?.keyword == "projB",
+          "switcher keyword keeps siblings outside the filtered pool")
+    check(WindowMenuModel.build(ws).first?.spaces.flatMap { $0.windows.map(\.keyword) } == ["projA", "projB"],
+          "menu entries carry keywords")
+}
+
+print("StackReorderPlanner")
+do {
+    check(StackReorderPlanner.swaps(ids: [1, 2, 3, 4], from: 0, to: 2) == [SwapStep(a: 1, b: 2), SwapStep(a: 1, b: 3)],
+          "move down = adjacent swaps")
+    check(StackReorderPlanner.swaps(ids: [1, 2, 3, 4], from: 3, to: 1) == [SwapStep(a: 4, b: 3), SwapStep(a: 4, b: 2)],
+          "move up = adjacent swaps")
+    check(StackReorderPlanner.swaps(ids: [1, 2, 3], from: 1, to: 1).isEmpty, "same index → no swaps")
+    check(StackReorderPlanner.swaps(ids: [1, 2, 3], from: 5, to: 0).isEmpty, "from out of range → no swaps")
+    check(StackReorderPlanner.swaps(ids: [1, 2, 3], from: 0, to: 3).isEmpty, "to out of range → no swaps")
+    check(StackReorderPlanner.dropIndex(offsetFromTop: 70, cell: 32, count: 3) == 2, "drop index from offset")
+    check(StackReorderPlanner.dropIndex(offsetFromTop: -5, cell: 32, count: 3) == 0, "drop index clamps low")
+    check(StackReorderPlanner.dropIndex(offsetFromTop: 500, cell: 32, count: 3) == 2, "drop index clamps high")
+    check(AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).indicatorDragReorder,
+          "drag reorder defaults on")
+}
+
+print("WindowFocuser")
+do {
+    func fakeYabai(focusExit: Int) -> String {
+        let path = NSTemporaryDirectory() + "fake-yabai-\(UUID().uuidString)"
+        let script = """
+        #!/bin/sh
+        case "$*" in
+          *--focus*) exit \(focusExit) ;;
+          *query*) echo '[{"id":7,"pid":42,"app":"Gather","frame":{"x":0,"y":0,"w":1,"h":1},"display":1,"space":1,"stack-index":0,"has-focus":false}]' ;;
+        esac
+        """
+        try? script.write(toFile: path, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        return path
+    }
+    var reopened: [Int] = []
+    WindowFocuser(client: YabaiClient(yabaiPath: fakeYabai(focusExit: 0)), reopen: { reopened.append($0) })
+        .focus(windowId: 7)
+    check(reopened.isEmpty, "focus success → no reopen")
+    WindowFocuser(client: YabaiClient(yabaiPath: fakeYabai(focusExit: 1)), reopen: { reopened.append($0) })
+        .focus(windowId: 7)
+    check(reopened == [42], "focus failure (tray window, no AX ref) → reopen owning app")
+    reopened = []
+    WindowFocuser(client: YabaiClient(yabaiPath: fakeYabai(focusExit: 1)), reopen: { reopened.append($0) })
+        .focus(windowId: 999)
+    check(reopened.isEmpty, "focus failure for unknown window → nothing")
+}
+
+print("Menu hover")
+check(!AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).menuOpenOnHover,
+      "hover-to-open menu defaults off")
+
+print("WindowStripModel")
+do {
+    let r = YRect(x: 0, y: 0, w: 1, h: 1)
+    let ws = [YabaiWindow(id: 1, pid: 1, app: "Code", title: "a.swift — projA", frame: r, display: 1, space: 1, stackIndex: 0, hasFocus: true),
+              YabaiWindow(id: 2, pid: 1, app: "Code", title: "b.swift — projB", frame: r, display: 1, space: 2, stackIndex: 0, hasFocus: false),
+              YabaiWindow(id: 3, pid: 2, app: "Safari", title: "news", frame: r, display: 2, space: 3, stackIndex: 0, hasFocus: false)]
+    let sp = [SpaceInfo(index: 1, display: 1, isVisible: true),
+              SpaceInfo(index: 2, display: 1, isVisible: false),
+              SpaceInfo(index: 3, display: 2, isVisible: true, isNativeFullscreen: true)]
+    let strips = WindowStripModel.build(windows: ws, spaces: sp, spaceLabels: [2: "web"])
+    check(strips.map(\.display) == [1, 2], "one strip per display, ascending")
+    check(strips.first?.sections.map(\.name) == ["1", "web"], "sections per space; label or number")
+    check(strips.first?.sections.first?.isVisible == true, "visible space flagged")
+    check(strips.first?.sections.first?.chips.first?.focused == true, "focused chip flagged")
+    check(strips.first?.sections.first?.chips.first?.keyword == "projA", "chip keyword from WindowLabeler")
+    check(strips.first?.hidden == false && strips.last?.hidden == true, "hidden when visible space is native fullscreen")
+    func fit(_ n: Int, full: Double, compact: Double, available: Double) -> WindowStripModel.Density {
+        WindowStripModel.fit(fullWidths: Array(repeating: full, count: n),
+                             compactWidths: Array(repeating: compact, count: n),
+                             iconWidth: 30, overflowWidth: 30, available: available)
+    }
+    check(fit(2, full: 100, compact: 50, available: 250) == .full, "fit: full names")
+    check(fit(3, full: 100, compact: 60, available: 250) == .compact, "fit: shortened names")
+    check(fit(6, full: 100, compact: 60, available: 250) == .iconOnly, "fit: icons only")
+    check(fit(30, full: 100, compact: 60, available: 250) == .overflow(visible: 7), "fit: 30 windows overflow into +N")
+    check(fit(1, full: 100, compact: 60, available: 10) == .overflow(visible: 0), "fit: no room → only +N")
+    let sst = WindowStripModel.DisplayStrip(display: 1, hidden: false, sections: [])
+    let sfr = CGRect(x: 0, y: 0, width: 100, height: 100)
+    check(WindowStripModel.needsRender(cached: .init(strip: sst, frame: sfr, scale: 1), strip: sst, frame: sfr, scale: 0.8),
+          "strip size change → re-render")
+    check(AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).windowStripScale == 0.8, "strip size defaults to 0.8")
+    check(SpaceInfo.decodeList(#"[{"index":3,"display":2,"is-visible":true,"is-native-fullscreen":true}]"#.data(using: .utf8)!).first?.isNativeFullscreen == true,
+          "is-native-fullscreen decoded")
+}
+
+check(!AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).windowStrip,
+      "window strip defaults off")
+
+print("HyperKey")
+do {
+    let user: [String: UInt64] = ["HIDKeyboardModifierMappingSrc": 30064771299, "HIDKeyboardModifierMappingDst": 30064771300]
+    let ours: [String: UInt64] = ["HIDKeyboardModifierMappingSrc": 0x700000039, "HIDKeyboardModifierMappingDst": HyperKeyMapping.f18]
+    check(HyperKeyMapping.parse("(null)") == [], "hidutil (null) → no mappings")
+    check(HyperKeyMapping.parse("(\n    {\n    HIDKeyboardModifierMappingDst = 30064771300;\n    HIDKeyboardModifierMappingSrc = 30064771299;\n}\n)") == [user],
+          "hidutil OpenStep output parsed")
+    check(HyperKeyMapping.merged(existing: [user], source: .capsLock) == [user, ours], "merge appends ours, keeps user's")
+    check(HyperKeyMapping.merged(existing: [user, ours], source: .none) == [user], "crash cleanup removes only ours")
+    check(HyperKeyMapping.merged(existing: [ours], source: .rightCommand).count == 1, "source change → no duplicates")
+    check(HyperKeyMapping.hidutilJSON([ours]).contains("\"UserKeyMapping\""), "hidutil JSON shape")
+    var r = HyperKeyReducer()
+    let seq: [(HyperKeyReducer.Event, HyperKeyReducer.Action)] = [
+        (.hyperDown, .pressModifiers), (.hyperDown, .swallow), (.keyDown, .addHyperFlags), (.hyperDown, .swallow),
+        (.keyUp, .addHyperFlags), (.hyperUp, .releaseModifiers), (.hyperDown, .pressModifiers), (.hyperUp, .quickPress),
+        (.keyDown, .pass), (.hyperUp, .swallow)]
+    check(seq.allSatisfy { r.handle($0.0) == $0.1 }, "reducer: press/release modifiers once, chord vs quick press, autorepeat-safe")
+    check(Hotkey.parse("hyper - h")?.mods == [.ctrl, .shift, .alt, .cmd], "parse hyper")
+    check(Hotkey.parse("meh - h")?.mods == [.ctrl, .shift, .alt], "parse meh")
+    Hotkey.showHyperSymbol = true
+    check(Hotkey(mods: [.ctrl, .shift, .alt, .cmd], key: "h").displayString == "✦H", "hyper shown as ✦")
+    Hotkey.showHyperSymbol = false
+    check(Hotkey(mods: [.ctrl, .shift, .alt, .cmd], key: "h").displayString == "⌃⇧⌥⌘H", "hyper glyphs by default")
+    let c = AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8))
+    check(c.hyperKey == "none" && c.hyperQuickPress == "none" && c.hyperIncludeShift && !c.hyperShowSymbol,
+          "hyper defaults (off, shift on)")
+}
+
+print("Review fixes")
+do {
+    check(HyperKeyPlan.health(configured: .capsLock, ax: true, running: false) == .start, "health: start when AX granted")
+    check(HyperKeyPlan.health(configured: .capsLock, ax: false, running: true) == .stop, "health: stop when AX revoked mid-run")
+    check(HyperKeyPlan.health(configured: .capsLock, ax: true, running: true) == .keep, "health: keep when running")
+    check(HyperKeyPlan.health(configured: .none, ax: true, running: false) == .keep, "health: off stays off")
+    check(HyperKeyPlan.mapping(configured: .capsLock, tapRunning: false) == HyperSource.none, "no remap without a running tap")
+    check(HyperKeyPlan.mapping(configured: .capsLock, tapRunning: true) == .capsLock, "remap once tap runs")
+    check(HyperKeyMapping.parse("hidutil: error") == nil, "unparseable hidutil output → nil, not []")
+    check(HyperKeyMapping.parse("(\n)") == [], "empty hidutil list → []")
+    var r = HyperKeyReducer()
+    _ = r.handle(.hyperDown); _ = r.handle(.keyDown)
+    check(r.handle(.hyperFoundUp) == .releaseModifiers && r.handle(.hyperUp) == .swallow,
+          "missed hyper up (secure input) releases modifiers once")
+    _ = r.handle(.hyperDown)
+    check(r.handle(.hyperFoundUp) == .releaseModifiers, "found-up is never a quick press")
+    var h = HoverOpenLogic()
+    check(h.pointer(inside: true), "hover arms timer")
+    h.menuClosed(pointerInside: true)
+    check(!h.timerFired(pointerInside: true), "stale hover timer doesn't reopen a closed menu")
+    check(!h.pointer(inside: true), "still suppressed until pointer leaves")
+    _ = h.pointer(inside: false)
+    check(h.pointer(inside: true) && h.timerFired(pointerInside: true), "re-enter opens again")
+    let st = WindowStripModel.DisplayStrip(display: 1, hidden: false, sections: [])
+    let fr = CGRect(x: 0, y: 0, width: 100, height: 100)
+    check(!WindowStripModel.needsRender(cached: .init(strip: st, frame: fr), strip: st, frame: fr), "same strip+frame → skip")
+    check(WindowStripModel.needsRender(cached: .init(strip: st, frame: fr), strip: st, frame: fr.offsetBy(dx: 10, dy: 0)),
+          "screen frame change → re-render")
+    let icon = CGRect(x: 2422, y: 2171, width: 36, height: 24)
+    let active = CGRect(x: 978, y: 1117, width: 1920, height: 1080)
+    check(HoverOpenLogic.mirrored(icon, from: active, to: CGRect(x: -942, y: 1117, width: 1920, height: 1080))
+          == CGRect(x: 502, y: 2157, width: 36, height: 40), "status icon mirrored onto another external display")
+    check(HoverOpenLogic.mirrored(icon, from: active, to: CGRect(x: 0, y: 0, width: 1728, height: 1117))
+          == CGRect(x: 1252, y: 1077, width: 36, height: 40), "status icon mirrored onto the laptop display")
+}
+
+print("Drag to space: routing")
+do {
+    check(!SAProbe.available(csrutilOutput: "System Integrity Protection status: enabled."), "SIP fully on → no SA")
+    check(SAProbe.available(csrutilOutput: "System Integrity Protection status: disabled."), "SIP off → SA")
+    check(SAProbe.available(csrutilOutput: "System Integrity Protection status: enabled (Custom Configuration).\n\nConfiguration:\n"),
+          "custom SIP config → SA")
+    check(!SAProbe.available(csrutilOutput: nil), "csrutil failed → assume no SA")
+    check(MoveRouting.decide(windowSpace: 3, target: 3, saAvailable: true) == .noop, "same space → no-op")
+    check(MoveRouting.decide(windowSpace: 2, target: 5, saAvailable: true) == .script, "SA → yabai script")
+    check(MoveRouting.decide(windowSpace: 2, target: 5, saAvailable: false) == .sipFree, "no SA → SIP-free walk")
+    let hk = Hotkey(mods: [.ctrl, .shift, .alt, .cmd], key: "tab")
+    let set = ShortcutBindings.setting([], action: "open-window-switcher", hotkey: hk)
+    check(set == [ShortcutBinding(actionID: "open-window-switcher", enabled: true, hotkey: hk)], "binding created")
+    check(ShortcutBindings.setting(set, action: "open-window-switcher", hotkey: nil).first?.enabled == false,
+          "clearing a binding disables it")
+}
+
+print("Drag to space: SpaceMover.moveWindow")
+do {
+    final class RecSim: SpaceSimulating {
+        var walks = 0
+        func dragWalk(grabPoints: [CGPoint], direction: ArrowDirection, count: Int,
+                      liftCheck: (() -> Bool)?) -> DragWalkOutcome { walks += 1; return .walked(observedAll: true) }
+    }
+    struct NoProbe: GrabPointProbing { func role(at point: CGPoint) -> String? { nil } }
+    let path = NSTemporaryDirectory() + "fake-yabai-\(UUID().uuidString)"
+    try? "#!/bin/sh\ncase \"$*\" in *--focus*) exit 1 ;; esac\n".write(toFile: path, atomically: true, encoding: .utf8)
+    try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+    let sim = RecSim()
+    let mover = SpaceMover(client: YabaiClient(yabaiPath: path), simulator: sim, probe: NoProbe())
+    check(mover.moveWindow(id: 7, toSpace: 3) == .focusFailed && sim.walks == 0,
+          "unfocusable (tray-closed) window → focusFailed, no simulated walk")
+}
+
+print("SpaceInfo focus")
+check(SpaceInfo.decodeList(Data(#"[{"index":1,"display":1,"has-focus":true},{"index":2,"display":1}]"#.utf8)).map(\.hasFocus) == [true, false],
+      "SpaceInfo decodes has-focus")
+
+print("Drag to space: strip")
+do {
+    let r = YRect(x: 0, y: 0, w: 1, h: 1)
+    let ws = [YabaiWindow(id: 1, pid: 1, app: "A", title: "a", frame: r, display: 1, space: 1, stackIndex: 0, hasFocus: false)]
+    let sp = [SpaceInfo(index: 1, display: 1, isVisible: true), SpaceInfo(index: 2, display: 1, isVisible: false)]
+    check(WindowStripModel.build(windows: ws, spaces: sp, spaceLabels: [:], includeEmpty: true).first?.sections.map(\.space) == [1, 2],
+          "strip lists empty spaces as drop targets")
+    check(WindowStripModel.build(windows: ws, spaces: sp, spaceLabels: [:]).first?.sections.map(\.space) == [1],
+          "strip hides empty spaces by default")
+    let ranges = [(space: 1, minX: 0.0, maxX: 100.0), (space: 2, minX: 110.0, maxX: 200.0)]
+    check(WindowStripModel.dropSpace(x: 150, sections: ranges) == 2, "drop over a section")
+    check(WindowStripModel.dropSpace(x: 104, sections: ranges) == 1, "drop in a divider gap → nearest section")
+    check(WindowStripModel.dropSpace(x: 400, sections: ranges) == nil, "drop beyond the strip → nil")
+}
+
+print("Drag to space: review fixes")
+do {
+    func loggingYabai(focusExit: Int) -> (String, String) {
+        let dir = NSTemporaryDirectory() + "fy-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let log = dir + "/log", path = dir + "/yabai"
+        let script = """
+        #!/bin/sh
+        echo "$*" >> \(log)
+        case "$*" in
+          *"--windows --window"*) echo '{"id":7,"pid":1,"app":"A","frame":{"x":0,"y":0,"w":1,"h":1},"display":1,"space":2,"stack-index":0,"has-focus":true}' ;;
+          *query*--windows*) echo '[{"id":7,"pid":1,"app":"A","frame":{"x":0,"y":0,"w":1,"h":1},"display":1,"space":2,"stack-index":0,"has-focus":false}]' ;;
+          *--focus*) exit \(focusExit) ;;
+        esac
+        """
+        try? script.write(toFile: path, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        return (path, log)
+    }
+    let (p1, l1) = loggingYabai(focusExit: 0)
+    let c1 = YabaiClient(yabaiPath: p1)
+    WindowSpaceMover(client: c1, spaceMover: SpaceMover(client: c1), saAvailable: { true }).moveNow(windowId: 7, toSpace: 3)
+    check(((try? String(contentsOfFile: l1, encoding: .utf8)) ?? "").contains("-m window 7 --space 3"),
+          "SA path moves by window id with the app's own yabai (no PATH lookup)")
+    let (p2, l2) = loggingYabai(focusExit: 1)
+    let c2 = YabaiClient(yabaiPath: p2)
+    WindowSpaceMover(client: c2, spaceMover: SpaceMover(client: c2), saAvailable: { true }).moveNow(windowId: 7, toSpace: 3)
+    check(!((try? String(contentsOfFile: l2, encoding: .utf8)) ?? "").contains("--space"),
+          "SA path: focus failed → nothing is sent away")
+    let ranges = [(space: 1, minX: 0.0, maxX: 100.0), (space: 2, minX: 110.0, maxX: 200.0)]
+    check(WindowStripModel.dropSpace(x: 150, y: -200, height: 20, sections: ranges) == nil, "strip: drop far below cancels")
+    check(WindowStripModel.dropSpace(x: 150, y: 10, height: 20, sections: ranges) == 2, "strip: drop on the strip lands")
+}
+
+print("Spaces view (PR #4) model")
+do {
+    func w(_ id: Int, space: Int, scratchpad: String? = nil) -> YabaiWindow {
+        YabaiWindow(id: id, pid: id, app: "A", title: "t", frame: YRect(x: 0, y: 0, w: 200, h: 100),
+                    display: 1, space: space, stackIndex: 0, hasFocus: false, scratchpad: scratchpad)
+    }
+    let tiles = SpacesLayout.windowTiles(aspects: [2.0, 2.2, 0.5], width: 400, height: 220)
+    let inBounds = tiles.allSatisfy { $0.width > 0 && $0.height > 0 && $0.maxX <= 400 && $0.maxY <= 220 }
+    let disjoint = tiles.indices.allSatisfy { i in tiles.indices.allSatisfy { j in i == j || !tiles[i].insetBy(dx: 0.5, dy: 0.5).intersects(tiles[j]) } }
+    check(tiles.count == 3 && inBounds && disjoint, "window tiles: 3 positive, in-bounds, non-overlapping rects")
+    check(SpacesModel.windowIDsToMove(from: 1, to: 1, windows: [w(1, space: 1)]) == [], "space transfer onto itself moves nothing")
+    check(SpacesModel.displayableWindows([w(1, space: 1), w(2, space: 1, scratchpad: "x")]).map(\.id) == [1],
+          "scratchpad windows are not displayable")
+}
+
+print("Spaces switcher: cards, nav, interaction")
+do {
+    func win(_ id: Int, space: Int, display: Int = 1, stack: Int = 0) -> YabaiWindow {
+        YabaiWindow(id: id, pid: id, app: "A", title: "t\(id)", frame: YRect(x: 0, y: 0, w: 200, h: 100),
+                    display: display, space: space, stackIndex: stack, hasFocus: false)
+    }
+    let spaces = [SpaceInfo(index: 1, display: 1, isVisible: true, hasFocus: true),
+                  SpaceInfo(index: 2, display: 1, isVisible: false),
+                  SpaceInfo(index: 3, display: 2, isVisible: true, isNativeFullscreen: true)]
+    let windows = [win(11, space: 1, stack: 1), win(12, space: 1, stack: 0), win(31, space: 3, display: 2)]
+    let items = windows.map { SwitcherItem(id: $0.id, pid: $0.pid, app: $0.app, title: $0.title, space: $0.space,
+                                           display: $0.display, hasFocus: false) }
+    let cards = SpacesSwitcherModel.build(items: items, windows: windows, spaces: spaces,
+                                          labels: [2: "web"], matching: [11, 31])
+    check(cards.map(\.space) == [1, 2, 3] && cards.map(\.name) == ["Space 1", "web", "Space 3"],
+          "cards: every space incl. empty + fullscreen, display order, label names")
+    check(cards[0].tiles.map(\.item.id) == [12, 11] && cards[0].tiles.map(\.matches) == [false, true]
+          && cards[0].tiles.first?.aspect == 2, "tiles: stack order, query matches, aspect")
+    check(cards[2].isFullscreen && cards[0].hasFocus && cards[1].tiles.isEmpty, "cards: fullscreen / focus flags")
+    check(SpacesSwitcherModel.selectable(cards).map(\.id) == [11, 31], "only matching tiles are selectable")
+
+    let rects = [CGRect(x: 0, y: 0, width: 100, height: 50), CGRect(x: 120, y: 0, width: 100, height: 50),
+                 CGRect(x: 10, y: 80, width: 100, height: 50)]
+    check(SpatialNav.neighbor(of: 1, up: false, rects: rects) == 2, "↓ to the tile below")
+    check(SpatialNav.neighbor(of: 2, up: true, rects: rects) == 0, "↑ prefers the tile nearest in x")
+    check(SpatialNav.neighbor(of: 0, up: true, rects: rects) == nil && SpatialNav.neighbor(of: 9, up: true, rects: rects) == nil,
+          "↑ at the top / bad index → nil")
+
+    let cardRects = [(space: 1, rect: CGRect(x: 0, y: 0, width: 100, height: 100), isFullscreen: false),
+                     (space: 3, rect: CGRect(x: 120, y: 0, width: 100, height: 100), isFullscreen: true)]
+    check(SpacesInteraction.dropTarget(at: CGPoint(x: 50, y: 50), cards: cardRects, visible: nil) == 1, "drop on a card")
+    check(SpacesInteraction.dropTarget(at: CGPoint(x: 150, y: 50), cards: cardRects, visible: nil) == nil,
+          "fullscreen card isn't a drop target")
+    check(SpacesInteraction.dropTarget(at: CGPoint(x: 110, y: 50), cards: cardRects, visible: nil) == nil, "drop in a gap → nil")
+    check(SpacesInteraction.dropTarget(at: CGPoint(x: 50, y: 50), cards: cardRects,
+                                       visible: CGRect(x: 0, y: 60, width: 300, height: 100)) == nil,
+          "scrolled-away card isn't a drop target")
+    check(SpacesInteraction.swapAllowed(source: 1, target: 2, saAvailable: true, fullscreen: [])
+          && !SpacesInteraction.swapAllowed(source: 1, target: 1, saAvailable: true, fullscreen: [])
+          && !SpacesInteraction.swapAllowed(source: 1, target: 2, saAvailable: false, fullscreen: [])
+          && !SpacesInteraction.swapAllowed(source: 1, target: 3, saAvailable: true, fullscreen: [3]),
+          "space swap: SA only, not onto itself or a fullscreen space")
+    check(SpacesInteraction.cardClick(space: 4, saAvailable: true, recentWindowInSpace: nil) == .focusSpace(4)
+          && SpacesInteraction.cardClick(space: 4, saAvailable: false, recentWindowInSpace: 9) == .focusWindow(9)
+          && SpacesInteraction.cardClick(space: 4, saAvailable: false, recentWindowInSpace: nil) == .nothing,
+          "card click: SA focuses the space, else its recent window, else nothing")
+}
+
+print("Spaces switcher: no-follow move, space swap")
+do {
+    func logged(_ queryWindows: String) -> (String, String) {
+        let dir = NSTemporaryDirectory() + "fy-\(UUID().uuidString)"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let log = dir + "/log", path = dir + "/yabai"
+        let script = """
+        #!/bin/sh
+        echo "$*" >> \(log)
+        case "$*" in
+          *query*--windows*) echo '\(queryWindows)' ;;
+          *query*--spaces*) echo '[{"index":2,"display":1},{"index":3,"display":1}]' ;;
+        esac
+        """
+        try? script.write(toFile: path, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        return (path, log)
+    }
+    func w(_ id: Int, _ space: Int) -> String {
+        #"{"id":\#(id),"pid":1,"app":"A","frame":{"x":0,"y":0,"w":1,"h":1},"display":1,"space":\#(space),"stack-index":0,"has-focus":false}"#
+    }
+    func calls(_ log: String) -> String { (try? String(contentsOfFile: log, encoding: .utf8)) ?? "" }
+    let (p1, l1) = logged("[\(w(7, 2))]")
+    let c1 = YabaiClient(yabaiPath: p1)
+    WindowSpaceMover(client: c1, spaceMover: SpaceMover(client: c1), saAvailable: { true })
+        .moveNow(windowId: 7, toSpace: 3, follow: false)
+    check(calls(l1).contains("-m window 7 --space 3") && !calls(l1).contains("--focus"),
+          "SA move without follow: by id, no focus")
+    let both = "[\(w(21, 2)),\(w(22, 2)),\(w(31, 3))]"
+    let (p2, l2) = logged(both)
+    let c2 = YabaiClient(yabaiPath: p2)
+    WindowSpaceMover(client: c2, spaceMover: SpaceMover(client: c2), saAvailable: { true }).swapNow(2, 3)
+    check(["window 21 --space 3", "window 22 --space 3", "window 31 --space 2"].allSatisfy { calls(l2).contains($0) },
+          "space swap moves both sides' windows (SA)")
+    let (p3, l3) = logged(both)
+    let c3 = YabaiClient(yabaiPath: p3)
+    WindowSpaceMover(client: c3, spaceMover: SpaceMover(client: c3), saAvailable: { false }).swapNow(2, 3)
+    check(calls(l3).range(of: #"--space \d"#, options: .regularExpression) == nil, "space swap does nothing without the SA")
+}
+
+print("Spaces switcher: config")
+do {
+    let d = AppConfig.defaults
+    check(!d.switcherFollowMove && !d.switcherWallpaper && d.switcherWallpaperPath == "" && d.switcherWallpaperDarkPath == "",
+          "follow-move / wallpaper default off")
+    let legacy = AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8))
+    check(!legacy.switcherFollowMove && !legacy.switcherWallpaper && legacy.switcherWallpaperPath == "",
+          "a config without the keys loads the defaults")
+    let set = AppConfig.load(from: #"{"switcherFollowMove":true,"switcherWallpaperPath":"/tmp/w.heic"}"#.data(using: .utf8))
+    check(set.switcherFollowMove && set.switcherWallpaperPath == "/tmp/w.heic", "follow-move / wallpaper keys load")
+}
+
+print("Spaces switcher: review fixes")
+check(SpacesInteraction.recentWindow(inSpace: 2, mru: [9, 21], tilesInSpace: [22, 21]) == 21
+      && SpacesInteraction.recentWindow(inSpace: 2, mru: [9], tilesInSpace: [22, 21]) == 22
+      && SpacesInteraction.recentWindow(inSpace: 2, mru: [9], tilesInSpace: []) == nil,
+      "card click: recent window by MRU, else the card's first window")
+check(SpacesInteraction.moveAllowed(from: 1, to: 2, fullscreen: [])
+      && !SpacesInteraction.moveAllowed(from: 1, to: 1, fullscreen: [])
+      && !SpacesInteraction.moveAllowed(from: 3, to: 2, fullscreen: [3])
+      && !SpacesInteraction.moveAllowed(from: 1, to: 3, fullscreen: [3]),
+      "window move: not out of / into a fullscreen space, not onto itself")
+check(SpacesInteraction.pillFits(CGSize(width: 80, height: 50)) && !SpacesInteraction.pillFits(CGSize(width: 34, height: 19))
+      && !SpacesInteraction.pillFits(CGSize(width: 24, height: 40)), "project pill only on tiles big enough for it")
+
+print("Auto padding & restart")
+do {
+    let original = Paddings(left: 30, right: 30, top: 8)
+    check(AutoPadding.target(original: original, cellSize: 32, stripEnabled: true, stripScale: 0.8)
+          == Paddings(left: 34, right: 34, top: 26), "auto padding: indicator + 2, strip height + 6")
+    check(AutoPadding.target(original: original, cellSize: 20, stripEnabled: false, stripScale: 0.8)
+          == Paddings(left: 22, right: 22, top: 8), "auto padding shrinks with the indicator; strip off keeps top")
+    check(AutoPadding.parse("12\n") == 12 && AutoPadding.parse("12.0") == 12 && AutoPadding.parse("unknown key") == nil
+          && AutoPadding.parse(nil) == nil, "yabai config value parsing")
+    check(Relauncher.arguments(bundlePath: "/Applications/Y.app", executablePath: "/Applications/Y.app/Contents/MacOS/y")
+          == ["-c", "sleep 0.5; /usr/bin/open -n '/Applications/Y.app'"]
+          && Relauncher.arguments(bundlePath: "/tmp/build", executablePath: "/tmp/build/y")
+          == ["-c", "sleep 0.5; '/tmp/build/y' >/dev/null 2>&1 &"], "restart relaunches the bundle (or bare binary)")
+    let dir = NSTemporaryDirectory() + "fy-\(UUID().uuidString)"
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    let log = dir + "/log", path = dir + "/yabai"
+    try? "#!/bin/sh\necho \"$*\" >> \(log)\n[ $# -eq 3 ] && echo 10\nexit 0\n".write(toFile: path, atomically: true, encoding: .utf8)
+    try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+    let c = AutoPaddingController(client: YabaiClient(yabaiPath: path))
+    c.update(enabled: true, cellSize: 32, stripEnabled: true, stripScale: 0.8)
+    let applied = (try? String(contentsOfFile: log, encoding: .utf8)) ?? ""
+    check(applied.contains("-m config left_padding 34") && applied.contains("-m config top_padding 26"),
+          "auto padding applied via yabai config")
+    c.update(enabled: false, cellSize: 32, stripEnabled: true, stripScale: 0.8)
+    let restored = (try? String(contentsOfFile: log, encoding: .utf8)) ?? ""
+    check(restored.contains("-m config left_padding 10") && restored.contains("-m config top_padding 10"),
+          "turning it off restores the original values")
+    check(!AppConfig.defaults.autoPadding && !AppConfig.load(from: #"{"style":"flag"}"#.data(using: .utf8)).autoPadding,
+          "auto padding defaults off")
+}
+
+print("Search switcher: hover")
+check(SpacesInteraction.hoverPasses(gate: nil, pointer: CGPoint(x: 5, y: 5)), "no gate → hover counts")
+check(!SpacesInteraction.hoverPasses(gate: CGPoint(x: 100, y: 100), pointer: CGPoint(x: 103, y: 98)),
+      "pointer resting where the panel opened → ignored")
+check(SpacesInteraction.hoverPasses(gate: CGPoint(x: 100, y: 100), pointer: CGPoint(x: 106, y: 100)),
+      "pointer moved → hover counts")
+check(SpacesInteraction.actionIndex(selection: 2, count: 5, highlighted: true) == 2, "Enter acts on the highlight")
+check(SpacesInteraction.actionIndex(selection: 2, count: 5, highlighted: false) == nil,
+      "pointer left every tile → Enter / ⌘W / ⌘Q do nothing")
+check(SpacesInteraction.actionIndex(selection: 0, count: 0, highlighted: true) == nil, "no matches → nothing")
+
+print("Window strip: empty slots, cross-display drop")
+do {
+    let empty = WindowStripModel.SpaceSection(space: 3, name: "3", isVisible: true, chips: [])
+    check(WindowStripModel.shows(.init(display: 2, hidden: false, sections: [empty])), "display with only empty spaces gets a strip")
+    check(!WindowStripModel.shows(.init(display: 2, hidden: true, sections: [empty])), "fullscreen display gets none")
+    check(!WindowStripModel.shows(.init(display: 2, hidden: false, sections: [])), "no spaces → no strip")
+    let left = WindowStripModel.DropRegion(frame: CGRect(x: 0, y: 1000, width: 200, height: 20),
+                                           sections: [(space: 1, minX: 0, maxX: 100), (space: 2, minX: 110, maxX: 200)])
+    let right = WindowStripModel.DropRegion(frame: CGRect(x: 1800, y: 900, width: 200, height: 20),
+                                            sections: [(space: 5, minX: 0, maxX: 90), (space: 6, minX: 100, maxX: 200)])
+    check(WindowStripModel.dropSpace(screenX: 150, screenY: 1010, regions: [left, right]) == 2, "drop on own display")
+    check(WindowStripModel.dropSpace(screenX: 1950, screenY: 910, regions: [left, right]) == 6, "drop on another display")
+    check(WindowStripModel.dropSpace(screenX: 1000, screenY: 910, regions: [left, right]) == nil, "between strips → cancel")
+    check(WindowStripModel.dropSpace(screenX: 1950, screenY: 500, regions: [left, right]) == nil, "far below → cancel")
+}
+
+print("Pin window on top")
+do {
+    var ps = YabaiSettings.defaults
+    ps.rules = [WindowRule(app: "IINA", mode: .pin), WindowRule(app: "Finder", mode: .float)]
+    let text = YabaiManagedConfig.generate(ps)
+    check(text.contains(#"yabai -m rule --add app="IINA" manage=off sub-layer=above"#), "pin rule floats the app above others")
+    check(YabaiManagedConfig.parse(text) == ps, "pin rule round-trips")
+    check(FreeformImporter.importYabai(fileText: #"yabai -m rule --add app="^IINA$" manage=off sub-layer=above"#,
+                                       current: YabaiSettings.defaults).settings.rules == [WindowRule(app: "^IINA$", mode: .pin)],
+          "import recognises a pin rule")
+    let pin = ShortcutCatalog.action(id: "pin-window-on-top")
+    check(pin?.group == "Shared" && pin?.defaultHotkey == nil && pin?.command == "sh ${SCRIPTS}/togglePinWindow.sh",
+          "pin shortcut: Shared, no default hotkey, runs the toggle script")
+    check(ScriptInstaller.scriptNames.contains("togglePinWindow.sh"), "toggle script is installed")
 }
 
 print("")

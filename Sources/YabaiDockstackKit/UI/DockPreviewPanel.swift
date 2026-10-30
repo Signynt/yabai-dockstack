@@ -4,11 +4,14 @@ import CoreGraphics
 public struct PreviewItem {
     public let windowID: Int
     public let title: String
+    /// Short distinguishing label (e.g. project name); see `WindowLabeler`.
+    public let keyword: String
     public let space: Int
     public let thumbnail: CGImage?
     public let icon: NSImage
-    public init(windowID: Int, title: String, space: Int, thumbnail: CGImage?, icon: NSImage) {
-        self.windowID = windowID; self.title = title; self.space = space
+    public init(windowID: Int, title: String, keyword: String, space: Int,
+                thumbnail: CGImage?, icon: NSImage) {
+        self.windowID = windowID; self.title = title; self.keyword = keyword; self.space = space
         self.thumbnail = thumbnail; self.icon = icon
     }
 }
@@ -57,15 +60,15 @@ public final class DockPreviewPanel {
                                    onClose: onClose == nil ? nil : { [weak self] id in self?.onClose?(id) })
             content.addSubview(cell)
         }
-        let effect = NSVisualEffectView(frame: CGRect(origin: .zero, size: frame.size))
+        let shell = RoundedPanelView(frame: CGRect(origin: .zero, size: frame.size), radius: 16)
+        let effect = NSVisualEffectView(frame: shell.bounds)
+        effect.autoresizingMask = [.width, .height]
         effect.material = .hudWindow
         effect.blendingMode = .behindWindow
         effect.state = .active
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = 16
-        effect.layer?.masksToBounds = true
         effect.addSubview(content)
-        p.contentView = effect
+        shell.addSubview(effect)
+        p.contentView = shell
         p.orderFrontRegardless()
         panel = p
         currentFrame = frame
@@ -108,7 +111,8 @@ final class PreviewCell: NSView {
         else { imgView.image = item.icon }
         addSubview(imgView)
 
-        let label = NSTextField(labelWithString: "\(item.title)  ·  Desktop \(item.space)")
+        let label = NSTextField(labelWithString: "\(item.keyword)  ·  Space \(item.space)")
+        toolTip = item.title
         label.font = .systemFont(ofSize: 11)
         label.textColor = .labelColor
         label.lineBreakMode = .byTruncatingTail
